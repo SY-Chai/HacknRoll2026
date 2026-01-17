@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
@@ -130,11 +130,10 @@ function createWavHeader(dataLength, sampleRate = 24000, numChannels = 1, bitsPe
   return header;
 }
 
-// Generate Audio using Gemini TTS
+// Generate Audio using OpenAI TTS
 export async function generateAudio(text, itemId) {
-  // 1. Check if audio file already exists for this ID
-  // Note: We use the EXACT itemId passed, assuming it is stable.
-  const filename = `audio_${itemId}.wav`;
+  // 1. Check if audio file already exists for this ID relative to content
+  const filename = `audio_${itemId}.mp3`;
   const tmpDir = path.join(process.cwd(), 'tmp');
   const filePath = path.join(tmpDir, filename);
 
@@ -143,66 +142,45 @@ export async function generateAudio(text, itemId) {
       return filename;
   }
 
-  // Use a known valid model supporting Audio generation
-  const ttsModel = "gemini-2.5-flash-preview-tts";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const url = 'https://api.openai.com/v1/audio/speech';
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+      console.error("OPENAI_API_KEY missing");
+      return null;
+  }
 
   const payload = {
-    contents: [{
-      parts: [{ text: text }]
-    }],
-    generationConfig: {
-      responseModalities: ["AUDIO"],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: "Fenrir" // Formal voice
-          }
-        }
-      }
-    }
+    model: "tts-1",
+    input: text,
+    voice: "alloy",
+    response_format: "mp3"
   };
 
   try {
-    console.log(`Generating audio using ${ttsModel} (Voice: Fenrir)...`);
-    const response = await axios.post(url, payload, { timeout: 15000 }); // 15s timeout
+    console.log(`Generating audio via OpenAI (Voice: Alloy)...`);
+    const response = await axios.post(url, payload, {
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        responseType: 'arraybuffer', // Important for binary data
+        timeout: 30000 
+    });
 
-    if (response.data.candidates && response.data.candidates[0].content.parts[0].inlineData) {
-      const inlineData = response.data.candidates[0].content.parts[0].inlineData;
-      const audioData = inlineData.data;
-      const rawBuffer = Buffer.from(audioData, 'base64');
-
-      // Determine sample rate from mimeType if possible, otherwise default 24000
-      // Expected: audio/L16;codec=pcm;rate=24000
-      let sampleRate = 24000;
-      if (inlineData.mimeType && inlineData.mimeType.includes('rate=')) {
-        try {
-          const match = inlineData.mimeType.match(/rate=(\d+)/);
-          if (match && match[1]) sampleRate = parseInt(match[1]);
-        } catch (e) {
-          console.log("Could not parse rate, default to 24000");
-        }
-      }
-
-      const wavHeader = createWavHeader(rawBuffer.length, sampleRate);
-      const finalBuffer = Buffer.concat([wavHeader, rawBuffer]);
-
-      // Filename is already defined at top of function
-      if (!fs.existsSync(tmpDir)) {
-        fs.mkdirSync(tmpDir);
-      }
-      
-      fs.writeFileSync(filePath, finalBuffer);
-      console.log(`Audio saved to: ${filePath}`);
-      return filename;
-    } else {
-      console.error("No audio data in response");
-      return null;
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir);
     }
+    
+    fs.writeFileSync(filePath, Buffer.from(response.data));
+    console.log(`Audio saved to: ${filePath}`);
+    return filename;
+
   } catch (error) {
-    console.error("Audio generation failed:", error.message);
+    console.error("OpenAI TTS failed:", error.message);
     if (error.response) {
-      console.error("Error Details:", error.response.data);
+      console.error("Error Status:", error.response.status);
+      // Try to decode buffer to see error message if possible, or just log status
     }
     return null;
   }
