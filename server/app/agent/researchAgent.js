@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
@@ -91,5 +93,103 @@ export async function enhanceDescription(title, date) {
        console.error('Gemini Response Error:', error.response);
     }
     return `Photo of ${title}, taken in ${date}. (AI description unavailable: ${error.message})`;
+  }
+}
+
+// Helper to create WAV header for raw PCM
+function createWavHeader(dataLength, sampleRate = 24000, numChannels = 1, bitsPerSample = 16) {
+  const header = Buffer.alloc(44);
+  
+  // RIFF identifier
+  header.write('RIFF', 0);
+  // File size usually dataLength + 36
+  header.writeUInt32LE(dataLength + 36, 4);
+  // WAVE identifier
+  header.write('WAVE', 8);
+  // fmt chunk identifier
+  header.write('fmt ', 12);
+  // Chunk length (16 for PCM)
+  header.writeUInt32LE(16, 16);
+  // Audio format (1 for PCM)
+  header.writeUInt16LE(1, 20);
+  // Number of channels
+  header.writeUInt16LE(numChannels, 22);
+  // Sample rate
+  header.writeUInt32LE(sampleRate, 24);
+  // Byte rate (SampleRate * NumChannels * BitsPerSample/8)
+  header.writeUInt32LE(sampleRate * numChannels * (bitsPerSample / 8), 28);
+  // Block align (NumChannels * BitsPerSample/8)
+  header.writeUInt16LE(numChannels * (bitsPerSample / 8), 32);
+  // Bits per sample
+  header.writeUInt16LE(bitsPerSample, 34);
+  // data chunk identifier
+  header.write('data', 36);
+  // Data chunk length
+  header.writeUInt32LE(dataLength, 40);
+  
+  return header;
+}
+
+// Generate Audio using Gemini TTS
+export async function generateAudio(text, itemId) {
+  const ttsModel = "gemini-2.5-flash-preview-tts";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  
+  const payload = {
+    contents: [{
+      parts: [{ text: text }]
+    }],
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: {
+            voiceName: "Fenrir" // Formal voice
+          }
+        }
+      }
+    }
+  };
+
+  try {
+    console.log("Generating audio (Fenrir)...");
+    const response = await axios.post(url, payload);
+    
+    if (response.data.candidates && response.data.candidates[0].content.parts[0].inlineData) {
+      const inlineData = response.data.candidates[0].content.parts[0].inlineData;
+      const audioData = inlineData.data;
+      const rawBuffer = Buffer.from(audioData, 'base64');
+      
+      // Determine sample rate from mimeType if possible, otherwise default 24000
+      // Expected: audio/L16;codec=pcm;rate=24000
+      let sampleRate = 24000;
+      if (inlineData.mimeType && inlineData.mimeType.includes('rate=')) {
+         try {
+           const match = inlineData.mimeType.match(/rate=(\d+)/);
+           if (match && match[1]) sampleRate = parseInt(match[1]);
+         } catch (e) {
+           console.log("Could not parse rate, default to 24000");
+         }
+      }
+
+      const wavHeader = createWavHeader(rawBuffer.length, sampleRate);
+      const finalBuffer = Buffer.concat([wavHeader, rawBuffer]);
+      
+      const filename = `audio_${itemId}_${Date.now()}.wav`; // Correct extension .wav
+      const filePath = path.join(process.cwd(), 'tmp', filename);
+      
+      fs.writeFileSync(filePath, finalBuffer);
+      console.log(`Audio saved to: ${filePath}`);
+      return filename;
+    } else {
+      console.error("No audio data in response");
+      return null;
+    }
+  } catch (error) {
+    console.error("Audio generation failed:", error.message);
+    if (error.response) {
+      console.error("Error Details:", error.response.data);
+    }
+    return null;
   }
 }

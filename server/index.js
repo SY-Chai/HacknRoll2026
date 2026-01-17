@@ -2,12 +2,16 @@ import express from 'express';
 import cors from 'cors';
 import routes from './app/api/routes.js';
 
+import path from 'path';
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+// Serve audio files from tmp directory
+app.use('/audio', express.static(path.join(process.cwd(), 'tmp')));
 
 // Routes
 app.use('/api', routes);
