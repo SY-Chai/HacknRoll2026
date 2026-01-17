@@ -1,12 +1,14 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import SplatViewer from '../components/SplatViewer';
 import { ArrowLeft } from 'lucide-react';
 
 export default function SplatPage() {
     const navigate = useNavigate();
-    // Using a valid public splat from sparkjs.dev
-    const splatURL = 'https://sparkjs.dev/assets/splats/butterfly.spz';
+    const location = useLocation();
+
+    // Use URL passed from state, or fallback to default
+    const splatURL = location.state?.splatUrl || 'https://sparkjs.dev/assets/splats/butterfly.spz';
+    const description = location.state?.description || 'Interacting with Gaussian Splat';
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
@@ -49,7 +51,7 @@ export default function SplatPage() {
             }}>
                 <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Gaussian Splat Viewer</h2>
                 <p style={{ margin: '5px 0 0 0', opacity: 0.8, fontSize: '0.9rem' }}>
-                    Interacting with plush_shiba.splat using Spark
+                    {description}
                 </p>
             </div>
 

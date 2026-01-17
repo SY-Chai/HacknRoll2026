@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import SceneViewer from '../components/SceneViewer';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette, Split, ArrowLeft, Wand2, Box } from 'lucide-react';
+import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slider';
 
 export default function Journey() {
   const { id } = useParams();
@@ -28,6 +29,7 @@ export default function Journey() {
           text: record.description || "No description available.",
           visualFocus: 'default',
           img_url: record.image_url ? `/api/proxy-image?url=${encodeURIComponent(record.image_url)}` : null,
+          original_img_url: record.image_url,
           date: record.created_at ? new Date(record.created_at).toLocaleDateString() : "Unknown Date",
           audio_url: record.audio_url,
           colorized_url: null,
@@ -57,6 +59,7 @@ export default function Journey() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isAudioProcessing, setIsAudioProcessing] = useState(false);
   const [isColorizing, setIsColorizing] = useState(false);
+  const [isGenerating3D, setIsGenerating3D] = useState(false);
 
   // UI State
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -245,43 +248,108 @@ export default function Journey() {
     }
   };
 
-  const handleColorize = async () => {
-    if (currentChapter.colorized_url) {
-      setChapters(prev => {
-        const next = [...prev];
-        next[currentChapterIndex].isColorMode = !next[currentChapterIndex].isColorMode;
-        return next;
-      });
-      return;
-    }
+  /* --- Auto-Colorization Logic --- */
+  useEffect(() => {
+    // Only run if we have chapters
+    if (!chapters || chapters.length === 0) return;
 
-    setIsColorizing(true);
+    chapters.forEach((chapter, index) => {
+      // If no colorized url, trigger generation
+      if (chapter.original_img_url && !chapter.colorized_url && !chapter.isColorizing) {
+        triggerColorization(index, chapter.original_img_url);
+      }
+    });
+  }, [chapters]);
+
+  const triggerColorization = async (index, url) => {
+    // Optimistically mark as colorizing to prevent duplicate triggers
+    setChapters(prev => {
+      const newChaps = [...prev];
+      if (newChaps[index].isColorizing) return prev;
+      newChaps[index] = { ...newChaps[index], isColorizing: true };
+      return newChaps;
+    });
+
     try {
-      const originalUrl = chapters[currentChapterIndex].img_url;
       const response = await fetch('/api/colorize-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: originalUrl })
+        body: JSON.stringify({ url })
       });
 
       if (!response.ok) throw new Error("Colorization failed");
 
       const data = await response.json();
-      if (data.success && data.colorUrl) {
+      if (data.success && data.colorizedUrl) {
         setChapters(prev => {
-          const next = [...prev];
-          next[currentChapterIndex] = {
-            ...next[currentChapterIndex],
-            colorized_url: data.colorUrl,
-            isColorMode: true
+          const newChaps = [...prev];
+          newChaps[index] = {
+            ...newChaps[index],
+            colorized_url: data.colorizedUrl,
+            isColorMode: true, // Auto-switch to compare mode!
+            isColorizing: false
           };
-          return next;
+          return newChaps;
         });
       }
+    } catch (err) {
+      console.error("Auto-colorization error for index " + index, err);
+      setChapters(prev => {
+        const newChaps = [...prev];
+        newChaps[index] = { ...newChaps[index], isColorizing: false };
+        return newChaps;
+      });
+    }
+  };
+
+  const toggleColorMode = () => {
+    // Toggle check: if we have colorized url, toggle mode.
+    // If we don't, manually trigger (fallback, though auto should handle it)
+    const currentChapter = chapters[currentChapterIndex];
+    if (currentChapter.colorized_url) {
+      setChapters(prev => {
+        const newChaps = [...prev];
+        newChaps[currentChapterIndex].isColorMode = !newChaps[currentChapterIndex].isColorMode;
+        return newChaps;
+      });
+    } else {
+      // Retry colorization if it failed or hasn't started
+      triggerColorization(currentChapterIndex, currentChapter.original_img_url);
+    }
+  };
+
+  const handleGenerate3D = async () => {
+    setIsGenerating3D(true);
+    try {
+      const originalUrl = chapters[currentChapterIndex].original_img_url;
+      if (!originalUrl) throw new Error("No image URL found");
+
+      const response = await fetch('/api/generate-3d', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrls: [originalUrl] })
+      });
+
+      if (!response.ok) throw new Error("3D Generation failed");
+
+      const data = await response.json();
+      // Assuming data.results is array of { ply_url, status }
+      if (data.results && data.results[0] && data.results[0].ply_url) {
+        navigate('/splat', {
+          state: {
+            splatUrl: data.results[0].ply_url,
+            description: `3D Model of ${chapters[currentChapterIndex].title}`
+          }
+        });
+      } else {
+        throw new Error("No PLY URL returned");
+      }
+
     } catch (error) {
-      console.error("Colorization error:", error);
+      console.error("3D Generation Error:", error);
+      alert("Failed to generate 3D model. Check console for details.");
     } finally {
-      setIsColorizing(false);
+      setIsGenerating3D(false);
     }
   };
 
@@ -363,18 +431,18 @@ export default function Journey() {
             alignItems: "center",
           }}
         >
-          {/* Colorize Toggle */}
+          {/* 3D-fy Button */}
           <button
-            onClick={handleColorize}
-            disabled={isColorizing}
+            onClick={handleGenerate3D}
+            disabled={isGenerating3D}
             className="glass-panel"
             style={{
               padding: "12px 20px",
-              background: currentChapter.isColorMode
-                ? "rgba(255, 170, 0, 0.2)"
+              background: isGenerating3D
+                ? "rgba(139, 92, 246, 0.2)" // Violet color with transparency
                 : "rgba(255, 255, 255, 0.1)",
-              border: currentChapter.isColorMode
-                ? "1px solid rgba(255, 170, 0, 0.5)"
+              border: isGenerating3D
+                ? "1px solid rgba(139, 92, 246, 0.5)"
                 : "1px solid rgba(255, 255, 255, 0.1)",
               color: "white",
               display: "flex",
@@ -383,13 +451,13 @@ export default function Journey() {
               transition: "all 0.3s ease",
             }}
           >
-            {isColorizing ? (
+            {isGenerating3D ? (
               <Loader2 size={18} className="spinner" />
             ) : (
-              <Palette size={18} />
+              <Box size={18} />
             )}
             <span style={{ fontWeight: 600 }}>
-              {currentChapter.isColorMode ? "B&W" : "Colorize"}
+              {isGenerating3D ? "Generating 3D..." : "3D-fy"}
             </span>
           </button>
 
@@ -535,42 +603,28 @@ export default function Journey() {
         >
           {currentChapter.img_url ? (
             <>
-              <img
-                src={currentChapter.img_url}
-                alt={currentChapter.title}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  background: "#000",
-                  transition: "opacity 0.4s ease",
-                }}
-              />
-
-              <AnimatePresence>
-                {currentChapter.isColorMode && currentChapter.colorized_url && (
-                  <motion.img
-                    key="colorized"
-                    src={currentChapter.colorized_url}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.4 }}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      background: "#000",
-                    }}
-                  />
-                )}
-              </AnimatePresence>
+              {currentChapter.isColorMode && currentChapter.colorized_url ? (
+                <ReactCompareSlider
+                  itemOne={<ReactCompareSliderImage src={currentChapter.img_url} alt="Original" style={{ objectFit: "contain", background: "#000" }} />}
+                  itemTwo={<ReactCompareSliderImage src={currentChapter.colorized_url} alt="Colorized" style={{ objectFit: "contain", background: "#000" }} />}
+                  style={{ width: "100%", height: "100%", background: "#000" }}
+                />
+              ) : (
+                <img
+                  src={currentChapter.img_url}
+                  alt={currentChapter.title}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    background: "#000",
+                    transition: "opacity 0.4s ease",
+                  }}
+                />
+              )}
 
               {isColorizing && (
                 <div

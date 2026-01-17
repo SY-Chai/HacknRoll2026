@@ -28,27 +28,35 @@ async function uploadToR2(file, bucket) {
 // --- 1. SEARCH -> DB ---
 router.post('/search', async (req, res) => {
     try {
-        const { query } = req.body;
+        const { query, startYear, endYear } = req.body;
         if (!query) return res.status(400).json({ error: "Missing query" });
 
-        console.log(`[Journal] Searching for: ${query}`);
+        console.log(`[Journal] Searching for: ${query} (${startYear || 'Any'} - ${endYear || 'Any'})`);
 
         // 1. Check for existing Journal
-        const { data: existingJournals, error: findError } = await supabase
-            .from('Journal')
-            .select('id')
-            .eq('query', query)
-            .limit(1);
+        // NOTE: If we want to cache by query AND date, we'd need to update the schema or query logic.
+        // For now, let's assume specific date searches are unique enough to warrant a new scrape if the exact query+params don't match.
+        // Actually, the simple 'eq("query", query)' might return a journal that was scraped WITHOUT date filters.
+        // To be safe/simple for HacknRoll, we'll SKIP cache if date filters are present, OR just scrape fresh.
+        // Let's scrape fresh if dates are provided to ensure accuracy.
 
-        if (findError) throw findError;
+        let existingJournals = [];
+        if (!startYear && !endYear) {
+            const { data, error: findError } = await supabase
+                .from('Journal')
+                .select('id')
+                .eq('query', query)
+                .limit(1);
+            if (!findError) existingJournals = data;
+        }
 
         if (existingJournals && existingJournals.length > 0) {
             console.log(`[Journal] Found existing journal: ${existingJournals[0].id}`);
             return res.json({ success: true, journalId: existingJournals[0].id });
         }
 
-        // 2. No existing journal, Scrape & Create
-        const rawResults = await searchPhotographs(query, undefined, undefined, 5); // Limit 5 for speed
+        // 2. No existing journal (or bypass), Scrape & Create
+        const rawResults = await searchPhotographs(query, startYear, endYear, 5); // Limit 5 for speed
         const results = rawResults.slice(0, 5); // Ensure max 5
 
         // Create Journal Entry
@@ -63,17 +71,17 @@ router.post('/search', async (req, res) => {
         const records = [];
         // Sequential to avoid rate limits? Or Parallel? Parallel is faster.
         await Promise.all(results.map(async (item) => {
-             // 1. Enhance Description
-             let description = item.tempTitle;
-             try {
+            // 1. Enhance Description
+            let description = item.tempTitle;
+            try {
                 description = await enhanceDescription(item.title || item.tempTitle, item.date || "Unknown Date");
-             } catch (descErr) {
+            } catch (descErr) {
                 console.warn(`Description enhancement failed for ${item.url}`);
-             }
+            }
 
-             // 2. Upload Image to R2
-             let imageUrl = item.imageUrl;
-             try {
+            // 2. Upload Image to R2
+            let imageUrl = item.imageUrl;
+            try {
                 const imgRes = await axios.get(item.imageUrl, { responseType: 'arraybuffer' });
                 const buffer = Buffer.from(imgRes.data);
                 const file = {
@@ -83,12 +91,12 @@ router.post('/search', async (req, res) => {
                 };
                 const key = await uploadToR2(file, R2_BUCKETS.IMAGE);
                 imageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
-             } catch (imgErr) {
-                 console.warn(`Image upload to R2 failed for ${item.imageUrl}:`, imgErr.message);
-                 // Fallback to original URL if upload fails? Or null?
-                 // User wants R2, so if fail, maybe keep original or fail?
-                 // Keeping original allows app to still work.
-             }
+            } catch (imgErr) {
+                console.warn(`Image upload to R2 failed for ${item.imageUrl}:`, imgErr.message);
+                // Fallback to original URL if upload fails? Or null?
+                // User wants R2, so if fail, maybe keep original or fail?
+                // Keeping original allows app to still work.
+            }
 
             records.push({
                 journal_id: journal.id,
@@ -141,7 +149,7 @@ router.post('/create', upload.any(), async (req, res) => {
 
         for (let i = 0; i < parsedItems.length; i++) {
             const itemMetadata = parsedItems[i];
-            
+
             // Find Image
             const imageFile = files.find(f => f.fieldname === `image_${i}`);
             let imageUrl = null;
@@ -187,6 +195,9 @@ router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Check if id is valid string/number just to be safe, but allow UUIDs
+        if (!id) return res.status(400).json({ error: "Missing ID" });
+
         // Fetch Journal
         const { data: journal, error: journalError } = await supabase
             .from('Journal')
@@ -194,7 +205,14 @@ router.get('/:id', async (req, res) => {
             .eq('id', id)
             .single();
 
-        if (journalError) throw journalError;
+        if (journalError) {
+            // Handle Postgres "invalid input syntax" (e.g. text for bigint) gracefully
+            if (journalError.code === '22P02') {
+                console.warn(`[Journal] Invalid ID format for table: ${id}`);
+                return res.status(400).json({ error: "Invalid ID format" });
+            }
+            throw journalError;
+        }
 
         // Fetch Records
         const { data: records, error: recordsError } = await supabase

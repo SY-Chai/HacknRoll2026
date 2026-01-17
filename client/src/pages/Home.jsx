@@ -4,8 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, MapPin, ArrowRight, Clock, History, Sparkles } from 'lucide-react';
 import SceneViewer from '../components/SceneViewer';
 
+import Slider from 'rc-slider';
+import 'rc-slider/assets/index.css';
+
 export default function Home() {
     const [searchTerm, setSearchTerm] = useState('');
+    const [dateRange, setDateRange] = useState([1900, 2026]);
     const [recentSearches, setRecentSearches] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -35,7 +39,11 @@ export default function Home() {
             const response = await fetch('/api/journal/search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query })
+                body: JSON.stringify({
+                    query,
+                    startYear: dateRange[0].toString(),
+                    endYear: dateRange[1].toString()
+                })
             });
 
             if (!response.ok) throw new Error('Search failed');
@@ -143,7 +151,9 @@ export default function Home() {
                         width: '100%',
                         maxWidth: '650px',
                         display: 'flex',
-                        alignItems: 'center'
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '20px'
                     }}
                 >
                     <div className="glass-panel" style={{
@@ -212,6 +222,29 @@ export default function Home() {
                                 </>
                             )}
                         </button>
+                    </div>
+
+                    {/* Year Range Slider */}
+                    <div style={{ w: '90%', width: '90%', padding: '0 10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', marginBottom: '8px' }}>
+                            <span>{dateRange[0]}</span>
+                            <span>Year Range</span>
+                            <span>{dateRange[1]}</span>
+                        </div>
+                        <Slider
+                            range
+                            min={1800}
+                            max={2026}
+                            defaultValue={[1900, 2026]}
+                            value={dateRange}
+                            onChange={(val) => setDateRange(val)}
+                            trackStyle={[{ backgroundColor: 'var(--text-main)', height: 4 }]}
+                            handleStyle={[
+                                { borderColor: 'var(--text-main)', backgroundColor: 'var(--text-main)', opacity: 1 },
+                                { borderColor: 'var(--text-main)', backgroundColor: 'var(--text-main)', opacity: 1 }
+                            ]}
+                            railStyle={{ backgroundColor: 'rgba(255,255,255,0.2)', height: 4 }}
+                        />
                     </div>
                 </motion.form>
 
@@ -282,67 +315,71 @@ export default function Home() {
                 </motion.div>
 
                 {/* Error Message */}
-                {error && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        style={{
-                            color: '#ff6b6b',
-                            marginTop: '20px',
-                            background: 'rgba(255,0,0,0.1)',
-                            padding: '8px 16px',
-                            borderRadius: '8px',
-                            border: '1px solid rgba(255,0,0,0.2)'
-                        }}
-                    >
-                        {error}
-                    </motion.div>
-                )}
+                {
+                    error && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            style={{
+                                color: '#ff6b6b',
+                                marginTop: '20px',
+                                background: 'rgba(255,0,0,0.1)',
+                                padding: '8px 16px',
+                                borderRadius: '8px',
+                                border: '1px solid rgba(255,0,0,0.2)'
+                            }}
+                        >
+                            {error}
+                        </motion.div>
+                    )
+                }
 
                 {/* Recent Searches */}
-                {!isLoading && recentSearches.length > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.4 }}
-                        style={{ marginTop: '40px', width: '100%', maxWidth: '650px', textAlign: 'center' }}
-                    >
-                        <p style={{
-                            color: 'rgba(255,255,255,0.4)',
-                            fontSize: '0.9rem',
-                            marginBottom: '16px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '1px'
-                        }}>
-                            Recent Discoveries
-                        </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
-                            {recentSearches.map((term, i) => (
-                                <motion.button
-                                    key={i}
-                                    whileHover={{ scale: 1.05, backgroundColor: 'rgba(255,255,255,0.1)' }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => { setSearchTerm(term); performSearch(term); }}
-                                    style={{
-                                        padding: '8px 20px',
-                                        fontSize: '0.95rem',
-                                        color: 'rgba(255,255,255,0.8)',
-                                        background: 'rgba(255,255,255,0.03)',
-                                        border: '1px solid rgba(255,255,255,0.1)',
-                                        borderRadius: '30px',
-                                        cursor: 'pointer',
-                                        transition: 'border-color 0.2s'
-                                    }}
-                                >
-                                    <span style={{ opacity: 0.5, marginRight: '6px' }}>#</span>
-                                    {term}
-                                </motion.button>
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
+                {
+                    !isLoading && recentSearches.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.4 }}
+                            style={{ marginTop: '40px', width: '100%', maxWidth: '650px', textAlign: 'center' }}
+                        >
+                            <p style={{
+                                color: 'rgba(255,255,255,0.4)',
+                                fontSize: '0.9rem',
+                                marginBottom: '16px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '1px'
+                            }}>
+                                Recent Discoveries
+                            </p>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' }}>
+                                {recentSearches.map((term, i) => (
+                                    <motion.button
+                                        key={i}
+                                        whileHover={{ scale: 1.05, backgroundColor: 'rgba(255,255,255,0.1)' }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => { setSearchTerm(term); performSearch(term); }}
+                                        style={{
+                                            padding: '8px 20px',
+                                            fontSize: '0.95rem',
+                                            color: 'rgba(255,255,255,0.8)',
+                                            background: 'rgba(255,255,255,0.03)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '30px',
+                                            cursor: 'pointer',
+                                            transition: 'border-color 0.2s'
+                                        }}
+                                    >
+                                        <span style={{ opacity: 0.5, marginRight: '6px' }}>#</span>
+                                        {term}
+                                    </motion.button>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )
+                }
 
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

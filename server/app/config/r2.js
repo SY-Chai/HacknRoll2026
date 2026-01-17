@@ -4,10 +4,17 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Lazy load .env
-dotenv.config(); 
+dotenv.config();
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const accountId = process.env.R2_ACCOUNT_ID;
+
+console.log("--- R2 CONFIG DEBUG ---");
+console.log("R2_PUBLIC_IMAGE_URL:", process.env.R2_PUBLIC_IMAGE_URL);
+console.log("CLOUDFLARE_R2_IMAGE_URL:", process.env.CLOUDFLARE_R2_IMAGE_URL);
+console.log("R2_IMAGE_DOMAIN:", process.env.R2_IMAGE_DOMAIN);
+console.log("R2_IMAGE_BUCKET:", process.env.R2_IMAGE_BUCKET);
+console.log("-----------------------");
 
 // Parse Cloudflare S3 Key if present
 let accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -46,6 +53,10 @@ export const R2_BUCKETS = {
 };
 
 export const R2_DOMAINS = {
-    IMAGE: process.env.CLOUDFLARE_R2_IMAGE_URL || process.env.R2_IMAGE_DOMAIN || `https://${process.env.R2_IMAGE_BUCKET}`,
+    IMAGE: process.env.R2_PUBLIC_IMAGE_URL || process.env.CLOUDFLARE_R2_IMAGE_URL || process.env.R2_IMAGE_DOMAIN || (() => {
+        const bucket = process.env.R2_IMAGE_BUCKET || 'images';
+        if (bucket === 'images') console.warn("⚠️ R2_IMAGE_DOMAIN / R2_PUBLIC_IMAGE_URL not set. Defaulting to 'https://images' which is likely incorrect.");
+        return `https://${bucket}`;
+    })(),
     AUDIO: process.env.CLOUDFLARE_R2_AUDIO_URL || process.env.R2_AUDIO_DOMAIN || `https://${process.env.R2_AUDIO_BUCKET}`
 };
