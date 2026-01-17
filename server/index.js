@@ -13,8 +13,9 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-// Serve audio files from tmp directory
+// Serve audio files and colorized images from tmp directory
 app.use('/audio', express.static(path.join(process.cwd(), 'tmp')));
+app.use('/color', express.static(path.join(process.cwd(), 'tmp', 'color_cache')));
 
 // Routes
 app.use('/api', routes);

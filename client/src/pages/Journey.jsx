@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import SceneViewer from '../components/SceneViewer';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette } from 'lucide-react';
 
 export default function Journey() {
     const { state } = useLocation();
@@ -22,7 +22,9 @@ export default function Journey() {
         // Use proxy for images to avoid CORs/Hotlink issues
         img_url: item.imageUrl ? `/api/proxy-image?url=${encodeURIComponent(item.imageUrl)}` : null,
         date: item.date,
-        audio_url: item.audio || null // Initialize as null if not provided
+        audio_url: item.audio || null, // Initialize as null if not provided
+        colorized_url: null, // AI colorized version
+        isColorMode: false // Toggle between original and colorized
     }));
 
     // Use State for chapters to allow updating audio URLs dynamically
@@ -34,6 +36,7 @@ export default function Journey() {
     const [audioProgress, setAudioProgress] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isAudioProcessing, setIsAudioProcessing] = useState(false);
+    const [isColorizing, setIsColorizing] = useState(false);
 
     // UI State
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -229,6 +232,45 @@ export default function Journey() {
         }
     };
 
+    const handleColorize = async () => {
+        if (currentChapter.colorized_url) {
+            // Simply toggle if already exists
+            const newChapters = [...chapters];
+            newChapters[currentChapterIndex].isColorMode = !newChapters[currentChapterIndex].isColorMode;
+            setChapters(newChapters);
+            return;
+        }
+
+        setIsColorizing(true);
+        try {
+            const originalUrl = results[currentChapterIndex].imageUrl;
+            const response = await fetch('/api/colorize-image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: originalUrl })
+            });
+
+            if (!response.ok) throw new Error("Colorization failed");
+
+            const data = await response.json();
+            if (data.success && data.colorUrl) {
+                setChapters(prev => {
+                    const next = [...prev];
+                    next[currentChapterIndex] = {
+                        ...next[currentChapterIndex],
+                        colorized_url: data.colorUrl,
+                        isColorMode: true
+                    };
+                    return next;
+                });
+            }
+        } catch (error) {
+            console.error("Colorization error:", error);
+        } finally {
+            setIsColorizing(false);
+        }
+    };
+
     return (
         <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'auto' }}>
             <SceneViewer visualFocus={currentChapter.visualFocus} />
@@ -264,6 +306,26 @@ export default function Journey() {
                 </div>
 
                 <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+                    {/* Colorize Toggle */}
+                    <button
+                        onClick={handleColorize}
+                        disabled={isColorizing}
+                        className="glass-panel"
+                        style={{
+                            padding: '12px 20px',
+                            background: currentChapter.isColorMode ? 'rgba(255, 170, 0, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                            border: currentChapter.isColorMode ? '1px solid rgba(255, 170, 0, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            transition: 'all 0.3s ease'
+                        }}
+                    >
+                        {isColorizing ? <Loader2 size={18} className="spinner" /> : <Palette size={18} />}
+                        <span style={{ fontWeight: 600 }}>{currentChapter.isColorMode ? 'B&W' : 'Colorize'}</span>
+                    </button>
+
                     {/* Audio Controls */}
                     {isAudioProcessing ? (
                         <div className="glass-panel" style={{ padding: '12px', color: 'var(--text-muted)', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -345,10 +407,9 @@ export default function Journey() {
                 {/* Current Image (Center, Sharp, Large) */}
                 <motion.div
                     key={currentChapter.id}
-                    layoutId={currentChapter.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
+                    initial={{ opacity: 0, scale: 1 }}
                     animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', x: 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    transition={{ duration: 0.3 }}
                     onClick={() => currentChapter.img_url && setIsLightboxOpen(true)}
                     style={{
                         height: '65%',
@@ -365,16 +426,59 @@ export default function Journey() {
                 >
                     {currentChapter.img_url ? (
                         <>
+                            {/* Original Image (Always underneath or visible if not color mode) */}
                             <img
                                 src={currentChapter.img_url}
                                 alt={currentChapter.title}
-                                style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+                                style={{
+                                    position: 'absolute',
+                                    top: 0, left: 0,
+                                    width: '100%', height: '100%',
+                                    objectFit: 'contain', background: '#000',
+                                    transition: 'opacity 0.4s ease'
+                                }}
                             />
+
+                            {/* Colorized Image Overlay */}
+                            <AnimatePresence>
+                                {currentChapter.isColorMode && currentChapter.colorized_url && (
+                                    <motion.img
+                                        key="colorized"
+                                        src={currentChapter.colorized_url}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.4 }}
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0, left: 0,
+                                            width: '100%', height: '100%',
+                                            objectFit: 'contain', background: '#000'
+                                        }}
+                                    />
+                                )}
+                            </AnimatePresence>
+
+                            {/* Colorizing Overlay (Spinner) */}
+                            {isColorizing && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: 0, left: 0,
+                                    width: '100%', height: '100%',
+                                    background: 'rgba(0,0,0,0.4)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    zIndex: 10
+                                }}>
+                                    <Loader2 size={40} className="spinner" color="white" />
+                                </div>
+                            )}
+
                             {/* Hover hint */}
                             <div className="hover-hint" style={{
                                 position: 'absolute', top: 12, right: 12,
                                 background: 'rgba(0,0,0,0.6)', borderRadius: '50%', padding: '8px',
-                                opacity: 0, transition: 'opacity 0.2s'
+                                opacity: 0, transition: 'opacity 0.2s',
+                                zIndex: 20
                             }}>
                                 <Maximize2 size={20} color="white" />
                             </div>
@@ -545,7 +649,7 @@ export default function Journey() {
                         </button>
 
                         <motion.img
-                            src={currentChapter.img_url}
+                            src={currentChapter.isColorMode ? currentChapter.colorized_url : currentChapter.img_url}
                             alt={currentChapter.title}
                             initial={{ scale: 0.8, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}

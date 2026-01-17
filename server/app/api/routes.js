@@ -1,7 +1,7 @@
 import express from 'express';
 import axios from 'axios';
 import { searchPhotographs } from '../scraper/nasScraper.js';
-import { enhanceDescription, generateAudio } from '../agent/researchAgent.js';
+import { enhanceDescription, generateAudio, colorizeImage } from '../agent/researchAgent.js';
 
 const router = express.Router();
 
@@ -102,6 +102,27 @@ router.post('/generate-audio', async (req, res) => {
 
   } catch (error) {
     console.error("Generate Audio API Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// New Endpoint: Colorize Image via Nano Banana
+router.post('/colorize-image', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "Image URL is required" });
+
+    console.log(`Colorizing image on-demand: ${url}`);
+    const colorizedFile = await colorizeImage(url);
+
+    if (!colorizedFile) {
+      return res.status(500).json({ error: "Colorization failed" });
+    }
+
+    res.json({ success: true, colorUrl: `/color/${colorizedFile}` });
+
+  } catch (error) {
+    console.error("Colorize API Error:", error);
     res.status(500).json({ error: error.message });
   }
 });

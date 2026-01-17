@@ -235,3 +235,63 @@ export async function generateAudio(text, itemId) {
     setTimeout(() => pendingAudio.delete(textHash), 2000);
   }
 }
+
+// Colorize Image using Gemini Nano Banana (Flash Image)
+export async function colorizeImage(imageUrl) {
+  const colorModel = "gemini-2.5-flash-image"; // Official Nano Banana model
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${colorModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
+  const imageHash = crypto.createHash('md5').update(imageUrl).digest('hex');
+  const filename = `color_cache_${imageHash}.png`;
+  const tmpDir = path.join(process.cwd(), 'tmp', 'color_cache');
+  const filePath = path.join(tmpDir, filename);
+
+  if (fs.existsSync(filePath)) {
+    console.log(`Using cached colorized image: ${filename}`);
+    return filename;
+  }
+
+  try {
+    console.log(`Downloading image for colorization: ${imageUrl}`);
+    const imgResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    const base64Image = Buffer.from(imgResponse.data).toString('base64');
+
+    console.log(`Colorizing image via Nano Banana (${colorModel})...`);
+    const payload = {
+      contents: [{
+        parts: [
+          { text: "Restore and colorize this black and white photo. Upscale the image to 1080p and 4K resolution using professional restoration techniques. Make the colors realistic and vibrant. Output ONLY the colorized image." },
+          { inlineData: { mimeType: "image/jpeg", data: base64Image } }
+        ]
+      }],
+      generationConfig: {
+        responseModalities: ["IMAGE"],
+        temperature: 0.4
+      }
+    };
+
+    const response = await axios.post(url, payload, { timeout: 60000 });
+
+    if (response.data.candidates && response.data.candidates[0].content.parts[0].inlineData) {
+      const inlineData = response.data.candidates[0].content.parts[0].inlineData;
+      const colorImageData = inlineData.data;
+      const buffer = Buffer.from(colorImageData, 'base64');
+
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+
+      fs.writeFileSync(filePath, buffer);
+      console.log(`Colorized image saved to cache: ${filePath}`);
+      return filename;
+    } else {
+      throw new Error("No image data in response");
+    }
+  } catch (error) {
+    console.error("Colorization failed:", error.message);
+    if (error.response) {
+      console.error("Error Details:", JSON.stringify(error.response.data));
+    }
+    return null;
+  }
+}

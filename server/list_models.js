@@ -1,6 +1,7 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 async function listModels() {
   const key = process.env.GEMINI_API_KEY;
@@ -14,14 +15,14 @@ async function listModels() {
   try {
     console.log(`Fetching models from: ${url.replace(key, 'HIDDEN_KEY')}`);
     const response = await axios.get(url);
-    
+
     if (response.data && response.data.models) {
       console.log("Available Models:");
       response.data.models.forEach(m => {
         if (m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')) {
-           console.log(`- ${m.name} (Supported)`);
+          console.log(`- ${m.name} (Supported)`);
         } else {
-           console.log(`- ${m.name} (Not for generateContent)`);
+          console.log(`- ${m.name} (Not for generateContent)`);
         }
       });
     } else {
