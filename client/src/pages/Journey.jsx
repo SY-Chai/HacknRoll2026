@@ -10,7 +10,6 @@ export default function Journey() {
 
     // Support both single result (legacy/direct/refresh) and array of results (carousel)
     const results = state?.results || (state?.result ? [state.result] : []);
-    const query = state?.query || "Journey";
 
     // Initialize chapters state from search results
     // We map the incoming results to our internal "Chapter" format immediately
