@@ -1,9 +1,28 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import SceneViewer from '../components/SceneViewer';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette, Split, ArrowLeft, Wand2, Box } from 'lucide-react';
-import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slider';
+import React, { useState, useEffect, useRef } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import SceneViewer from "../components/SceneViewer";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Home as HomeIcon,
+  X,
+  Maximize2,
+  Volume2,
+  VolumeX,
+  Loader2,
+  Play,
+  Pause,
+  Palette,
+  Split,
+  ArrowLeft,
+  Wand2,
+  Box,
+} from "lucide-react";
+import {
+  ReactCompareSlider,
+  ReactCompareSliderImage,
+} from "react-compare-slider";
 
 export default function Journey() {
   const { id } = useParams();
@@ -27,17 +46,22 @@ export default function Journey() {
           id: record.id,
           title: record.title,
           text: record.description || "No description available.",
-          visualFocus: 'default',
-          img_url: record.image_url ? `/api/proxy-image?url=${encodeURIComponent(record.image_url)}` : null,
+          visualFocus: "default",
+          img_url: record.image_url
+            ? `/api/proxy-image?url=${encodeURIComponent(record.image_url)}`
+            : null,
           original_img_url: record.image_url,
-          date: record.created_at ? new Date(record.created_at).toLocaleDateString() : "Unknown Date",
+          date: record.created_at
+            ? new Date(record.created_at).toLocaleDateString()
+            : "Unknown Date",
           audio_url: record.audio_url,
           colorized_url: null,
-          isColorMode: false
+          isColorMode: false,
         }));
 
         console.log("Mapped Chapters:", mappedChapters);
-        if (mappedChapters.length === 0) console.warn("No chapters found in journal!");
+        if (mappedChapters.length === 0)
+          console.warn("No chapters found in journal!");
 
         setChapters(mappedChapters);
       } catch (err) {
@@ -68,21 +92,25 @@ export default function Journey() {
   // Check if saved on load
   useEffect(() => {
     if (!id) return;
-    const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+    const savedIds = JSON.parse(
+      localStorage.getItem("savedJournalIds") || "[]",
+    );
     setIsSaved(savedIds.includes(id));
   }, [id]);
 
   const handleSave = () => {
-    const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+    const savedIds = JSON.parse(
+      localStorage.getItem("savedJournalIds") || "[]",
+    );
     let newIds;
     if (isSaved) {
-      newIds = savedIds.filter(sid => sid !== id);
+      newIds = savedIds.filter((sid) => sid !== id);
       console.log(`[Journey] Removing ${id} from saved. New list:`, newIds);
     } else {
       newIds = [...savedIds, id];
       console.log(`[Journey] Adding ${id} to saved. New list:`, newIds);
     }
-    localStorage.setItem('savedJournalIds', JSON.stringify(newIds));
+    localStorage.setItem("savedJournalIds", JSON.stringify(newIds));
     setIsSaved(!isSaved);
   };
 
@@ -112,13 +140,15 @@ export default function Journey() {
 
   const updateProgress = () => {
     if (audioRef.current && audioRef.current.duration) {
-      setAudioProgress(audioRef.current.currentTime / audioRef.current.duration);
+      setAudioProgress(
+        audioRef.current.currentTime / audioRef.current.duration,
+      );
     }
   };
 
   const playAudio = (url) => {
     if (!url || !audioRef.current) return;
-    const fullUrl = url.startsWith('http') ? url : url;
+    const fullUrl = url.startsWith("http") ? url : url;
 
     if (!audioRef.current.src.includes(url)) {
       audioRef.current.src = fullUrl;
@@ -130,7 +160,7 @@ export default function Journey() {
       if (playPromise !== undefined) {
         playPromise
           .then(() => setIsPlaying(true))
-          .catch(e => console.error("Audio Play Error:", e));
+          .catch((e) => console.error("Audio Play Error:", e));
       }
     }
   };
@@ -139,10 +169,8 @@ export default function Journey() {
     const audio = new Audio();
     audioRef.current = audio;
 
-
-
-    audio.addEventListener('timeupdate', updateProgress);
-    audio.addEventListener('ended', onEnd);
+    audio.addEventListener("timeupdate", updateProgress);
+    audio.addEventListener("ended", onEnd);
 
     return () => {
       audio.removeEventListener("timeupdate", updateProgress);
@@ -167,15 +195,14 @@ export default function Journey() {
           .substring(0, 30);
         const stableId = `${safeTitle}_${currentChapter.date ? currentChapter.date.replace(/[^a-zA-Z0-9]/g, "") : "nodate"}`;
 
-
-        const response = await fetch('/api/generate-audio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/generate-audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: currentChapter.text,
             id: stableId,
-            recordId: currentChapter.id // Pass DB ID for updating
-          })
+            recordId: currentChapter.id, // Pass DB ID for updating
+          }),
         });
 
         if (!response.ok) return;
@@ -203,8 +230,6 @@ export default function Journey() {
     fetchAudioIfNeeded();
   }, [currentChapterIndex, currentChapter?.text]);
 
-
-
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentChapter) return;
@@ -223,7 +248,7 @@ export default function Journey() {
             if (playPromise !== undefined) {
               playPromise
                 .then(() => setIsPlaying(true))
-                .catch(e => console.error("Audio Play Error:", e));
+                .catch((e) => console.error("Audio Play Error:", e));
             }
           }
         }
@@ -233,64 +258,27 @@ export default function Journey() {
     }
   }, [currentChapterIndex, isMuted, currentChapter?.audio_url]);
 
-  /* --- Audio Logic End --- */
-
-  if (isLoading) {
-    return (
-      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-        <Loader2 size={48} className="spinner" />
-        <p style={{ marginTop: '16px' }}>Restoring Memory...</p>
-      </div>
-    );
-  }
-
-  if (error || chapters.length === 0) {
-    return (
-      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-        <p>{error || "No journey data found."}</p>
-        <button
-          onClick={() => navigate('/')}
-          className="glass-panel"
-          style={{ marginTop: '20px', padding: '12px 24px', cursor: 'pointer', color: 'white' }}
-        >
-          Return to Home
-        </button>
-      </div>
-    );
-  }
-
+  /* --- Navigation Functions --- */
   const nextChapter = () => {
     if (currentChapterIndex < chapters.length - 1) {
-      setCurrentChapterIndex(prev => prev + 1);
+      setCurrentChapterIndex((prev) => prev + 1);
       setAudioProgress(0);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
   const prevChapter = () => {
     if (currentChapterIndex > 0) {
-      setCurrentChapterIndex(prev => prev - 1);
+      setCurrentChapterIndex((prev) => prev - 1);
       setAudioProgress(0);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
-  /* --- Auto-Colorization Logic --- */
-  useEffect(() => {
-    // Only run if we have chapters
-    if (!chapters || chapters.length === 0) return;
-
-    chapters.forEach((chapter, index) => {
-      // If no colorized url, trigger generation
-      if (chapter.original_img_url && !chapter.colorized_url && !chapter.isColorizing) {
-        triggerColorization(index, chapter.original_img_url);
-      }
-    });
-  }, [chapters]);
-
+  /* --- Colorization Functions --- */
   const triggerColorization = async (index, url) => {
     // Optimistically mark as colorizing to prevent duplicate triggers
-    setChapters(prev => {
+    setChapters((prev) => {
       const newChaps = [...prev];
       if (newChaps[index].isColorizing) return prev;
       newChaps[index] = { ...newChaps[index], isColorizing: true };
@@ -298,30 +286,30 @@ export default function Journey() {
     });
 
     try {
-      const response = await fetch('/api/colorize-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+      const response = await fetch("/api/colorize-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
       });
 
       if (!response.ok) throw new Error("Colorization failed");
 
       const data = await response.json();
       if (data.success && data.colorizedUrl) {
-        setChapters(prev => {
+        setChapters((prev) => {
           const newChaps = [...prev];
           newChaps[index] = {
             ...newChaps[index],
             colorized_url: data.colorizedUrl,
             isColorMode: true, // Auto-switch to compare mode!
-            isColorizing: false
+            isColorizing: false,
           };
           return newChaps;
         });
       }
     } catch (err) {
       console.error("Auto-colorization error for index " + index, err);
-      setChapters(prev => {
+      setChapters((prev) => {
         const newChaps = [...prev];
         newChaps[index] = { ...newChaps[index], isColorizing: false };
         return newChaps;
@@ -334,9 +322,10 @@ export default function Journey() {
     // If we don't, manually trigger (fallback, though auto should handle it)
     const currentChapter = chapters[currentChapterIndex];
     if (currentChapter.colorized_url) {
-      setChapters(prev => {
+      setChapters((prev) => {
         const newChaps = [...prev];
-        newChaps[currentChapterIndex].isColorMode = !newChaps[currentChapterIndex].isColorMode;
+        newChaps[currentChapterIndex].isColorMode =
+          !newChaps[currentChapterIndex].isColorMode;
         return newChaps;
       });
     } else {
@@ -345,16 +334,34 @@ export default function Journey() {
     }
   };
 
+  /* --- Auto-Colorization Logic --- */
+  useEffect(() => {
+    // Only run if we have chapters
+    if (!chapters || chapters.length === 0) return;
+
+    chapters.forEach((chapter, index) => {
+      // If no colorized url, trigger generation
+      if (
+        chapter.original_img_url &&
+        !chapter.colorized_url &&
+        !chapter.isColorizing
+      ) {
+        triggerColorization(index, chapter.original_img_url);
+      }
+    });
+  }, [chapters]);
+
+  /* --- 3D Generation Function --- */
   const handleGenerate3D = async () => {
     setIsGenerating3D(true);
     try {
       const originalUrl = chapters[currentChapterIndex].original_img_url;
       if (!originalUrl) throw new Error("No image URL found");
 
-      const response = await fetch('/api/generate-3d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrls: [originalUrl] })
+      const response = await fetch("/api/generate-3d", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrls: [originalUrl] }),
       });
 
       if (!response.ok) throw new Error("3D Generation failed");
@@ -362,16 +369,15 @@ export default function Journey() {
       const data = await response.json();
       // Assuming data.results is array of { ply_url, status }
       if (data.results && data.results[0] && data.results[0].ply_url) {
-        navigate('/splat', {
+        navigate("/splat", {
           state: {
             splatUrl: data.results[0].ply_url,
-            description: `3D Model of ${chapters[currentChapterIndex].title}`
-          }
+            description: `3D Model of ${chapters[currentChapterIndex].title}`,
+          },
         });
       } else {
         throw new Error("No PLY URL returned");
       }
-
     } catch (error) {
       console.error("3D Generation Error:", error);
       alert("Failed to generate 3D model. Check console for details.");
@@ -380,9 +386,55 @@ export default function Journey() {
     }
   };
 
-  /* --- Audio Logic End --- */
+  /* --- Early Returns --- */
+  if (isLoading) {
+    return (
+      <div
+        className="full-screen"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+        }}
+      >
+        <Loader2 size={48} className="spinner" />
+        <p style={{ marginTop: "16px" }}>Restoring Memory...</p>
+      </div>
+    );
+  }
 
+  if (error || chapters.length === 0) {
+    return (
+      <div
+        className="full-screen"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+        }}
+      >
+        <p>{error || "No journey data found."}</p>
+        <button
+          onClick={() => navigate("/")}
+          className="glass-panel"
+          style={{
+            marginTop: "20px",
+            padding: "12px 24px",
+            cursor: "pointer",
+            color: "white",
+          }}
+        >
+          Return to Home
+        </button>
+      </div>
+    );
+  }
 
+  /* --- Main Render --- */
 
   return (
     <div
@@ -632,8 +684,20 @@ export default function Journey() {
             <>
               {currentChapter.isColorMode && currentChapter.colorized_url ? (
                 <ReactCompareSlider
-                  itemOne={<ReactCompareSliderImage src={currentChapter.img_url} alt="Original" style={{ objectFit: "contain", background: "#000" }} />}
-                  itemTwo={<ReactCompareSliderImage src={currentChapter.colorized_url} alt="Colorized" style={{ objectFit: "contain", background: "#000" }} />}
+                  itemOne={
+                    <ReactCompareSliderImage
+                      src={currentChapter.img_url}
+                      alt="Original"
+                      style={{ objectFit: "contain", background: "#000" }}
+                    />
+                  }
+                  itemTwo={
+                    <ReactCompareSliderImage
+                      src={currentChapter.colorized_url}
+                      alt="Colorized"
+                      style={{ objectFit: "contain", background: "#000" }}
+                    />
+                  }
                   style={{ width: "100%", height: "100%", background: "#000" }}
                 />
               ) : (
@@ -785,8 +849,6 @@ export default function Journey() {
           marginTop: "-20px",
         }}
       >
-
-
         <motion.div
           key={currentChapter.text}
           initial={{ opacity: 0, y: 10 }}
