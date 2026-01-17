@@ -265,45 +265,7 @@ export default function Journey() {
     }
   };
 
-  const handleColorize = async () => {
-    if (currentChapter.colorized_url) {
-      setChapters(prev => {
-        const next = [...prev];
-        next[currentChapterIndex].isColorMode = !next[currentChapterIndex].isColorMode;
-        return next;
-      });
-      return;
-    }
 
-    setIsColorizing(true);
-    try {
-      const originalUrl = chapters[currentChapterIndex].img_url;
-      const response = await fetch('/api/colorize-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: originalUrl })
-      });
-
-      if (!response.ok) throw new Error("Colorization failed");
-
-      const data = await response.json();
-      if (data.success && data.colorUrl) {
-        setChapters(prev => {
-          const next = [...prev];
-          next[currentChapterIndex] = {
-            ...next[currentChapterIndex],
-            colorized_url: data.colorUrl,
-            isColorMode: true
-          };
-          return next;
-        });
-      }
-    } catch (error) {
-      console.error("Colorization error:", error);
-    } finally {
-      setIsColorizing(false);
-    }
-  };
 
   /* --- Audio Logic End --- */
 
@@ -383,35 +345,7 @@ export default function Journey() {
             alignItems: "center",
           }}
         >
-          {/* Colorize Toggle */}
-          <button
-            onClick={handleColorize}
-            disabled={isColorizing}
-            className="glass-panel"
-            style={{
-              padding: "12px 20px",
-              background: currentChapter.isColorMode
-                ? "rgba(255, 170, 0, 0.2)"
-                : "rgba(255, 255, 255, 0.1)",
-              border: currentChapter.isColorMode
-                ? "1px solid rgba(255, 170, 0, 0.5)"
-                : "1px solid rgba(255, 255, 255, 0.1)",
-              color: "white",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              transition: "all 0.3s ease",
-            }}
-          >
-            {isColorizing ? (
-              <Loader2 size={18} className="spinner" />
-            ) : (
-              <Palette size={18} />
-            )}
-            <span style={{ fontWeight: 600 }}>
-              {currentChapter.isColorMode ? "B&W" : "Colorize"}
-            </span>
-          </button>
+
 
           {/* Audio Controls */}
           {isAudioProcessing ? (
