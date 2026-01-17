@@ -211,12 +211,12 @@ export default function Home() {
                     </div>
                 </motion.form>
 
-                {/* My Memories Button */}
+                {/* Action Buttons */}
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.3 }}
-                    style={{ marginTop: '24px' }}
+                    style={{ marginTop: '24px', display: 'flex', gap: '12px' }}
                 >
                     <button
                         onClick={() => navigate('/memories')}
@@ -245,6 +245,35 @@ export default function Home() {
                     >
                         <History size={18} />
                         My Memories
+                    </button>
+
+                    <button
+                        onClick={() => navigate('/splat')}
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            color: 'white',
+                            borderRadius: '30px',
+                            padding: '10px 24px',
+                            fontSize: '0.95rem',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            backdropFilter: 'blur(10px)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            transition: 'all 0.3s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                        }}
+                    >
+                        <Sparkles size={18} />
+                        View Splat
                     </button>
                 </motion.div>
 
