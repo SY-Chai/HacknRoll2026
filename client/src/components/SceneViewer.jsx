@@ -26,19 +26,8 @@ function PlaceholderModel({ type }) {
         geometry = <dodecahedronGeometry args={[1.5]} />;
     } else if (type === 'boat_quay') {
         color = "#3a86ff";
-        // Using a capsule-like shape (cylinder with caps) or simple box for boat
-        geometry = <capsuleGeometry args={[0.8, 2, 4, 8]} />;
-    } else if (type === 'shophouse_street') {
-        color = "#e63946";
-        // Taller thinner box
-        geometry = <boxGeometry args={[1.5, 3, 1.5]} />;
-    } else if (type === 'green_field') {
-        color = "#2a9d8f";
-        // Flat wide box
-        geometry = <boxGeometry args={[5, 0.2, 3]} />;
+        geometry = <boatGeometry args={[1]} />; // sticking to basic shapes fallback
     }
-
-    if (type === 'default') return null;
 
     return (
         <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>

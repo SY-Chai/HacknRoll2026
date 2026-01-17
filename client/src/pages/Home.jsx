@@ -7,17 +7,11 @@ import SceneViewer from '../components/SceneViewer';
 
 export default function Home() {
     const [searchTerm, setSearchTerm] = useState('');
-    const [startYear, setStartYear] = useState('1960');
-    const [endYear, setEndYear] = useState('1970');
     const navigate = useNavigate();
 
     const filteredLocations = locations.filter(loc =>
         loc.title.toLowerCase().includes(searchTerm.toLowerCase())
     );
-
-    const handleNavigate = (id) => {
-        navigate(`/journey/${id}`, { state: { startYear, endYear } });
-    };
 
     return (
         <div className="full-screen" style={{ position: 'relative' }}>
@@ -36,84 +30,41 @@ export default function Home() {
                         Time Capsule <span style={{ color: 'var(--accent-primary)' }}>SG</span>
                     </h1>
                     <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto' }}>
-                        Explore Singapore's history through immersive 3D journeys and archival records.
+                        Explore Singapore's history through immersive 3D journeys. Type a location to begin your adventure.
                     </p>
                 </motion.div>
 
-                {/* Search & Filter Bar */}
+                {/* Search Bar */}
                 <motion.div
                     className="glass-panel"
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.2, duration: 0.5 }}
                     style={{
-                        padding: '20px',
+                        padding: '12px 24px',
                         display: 'flex',
-                        flexDirection: 'column',
-                        gap: '16px',
                         alignItems: 'center',
                         width: '100%',
-                        maxWidth: '600px',
+                        maxWidth: '500px',
                         marginBottom: '40px'
                     }}
                 >
-                    {/* Location Search */}
-                    <div style={{ display: 'flex', alignItems: 'center', width: '100%', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
-                        <Search color="var(--text-muted)" size={20} />
-                        <input
-                            type="text"
-                            placeholder="Search location (e.g. Chinatown)..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'white',
-                                fontSize: '1.2rem',
-                                marginLeft: '12px',
-                                width: '100%',
-                                outline: 'none'
-                            }}
-                        />
-                    </div>
-
-                    {/* Timeframe Inputs */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>Time Era:</span>
-                        <input
-                            type="number"
-                            placeholder="Start"
-                            value={startYear}
-                            onChange={(e) => setStartYear(e.target.value)}
-                            className="glass-panel"
-                            style={{
-                                background: 'rgba(0,0,0,0.2)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                color: 'white',
-                                padding: '8px',
-                                borderRadius: '8px',
-                                width: '100px',
-                                textAlign: 'center'
-                            }}
-                        />
-                        <span style={{ color: 'var(--text-muted)' }}>-</span>
-                        <input
-                            type="number"
-                            placeholder="End"
-                            value={endYear}
-                            onChange={(e) => setEndYear(e.target.value)}
-                            className="glass-panel"
-                            style={{
-                                background: 'rgba(0,0,0,0.2)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                color: 'white',
-                                padding: '8px',
-                                borderRadius: '8px',
-                                width: '100px',
-                                textAlign: 'center'
-                            }}
-                        />
-                    </div>
+                    <Search color="var(--text-muted)" size={24} />
+                    <input
+                        type="text"
+                        placeholder="Search for a location (e.g. Fort Canning)..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'white',
+                            fontSize: '1.2rem',
+                            marginLeft: '16px',
+                            width: '100%',
+                            outline: 'none'
+                        }}
+                    />
                 </motion.div>
 
                 {/* Results Grid */}
@@ -126,7 +77,7 @@ export default function Home() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.4 + (index * 0.1) }}
                             whileHover={{ scale: 1.05, backgroundColor: 'var(--bg-card-hover)' }}
-                            onClick={() => handleNavigate(loc.id)}
+                            onClick={() => navigate(`/journey/${loc.id}`)}
                             style={{ padding: '24px', cursor: 'pointer', borderLeft: `4px solid ${loc.color}` }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
