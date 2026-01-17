@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Resolve to root .env (agent is in server/app/agent/researchAgent.js)
-const envPath = path.resolve(__dirname, '../../../.env');
+const envPath = path.resolve(__dirname, '../../.env');
 dotenv.config({ path: envPath });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -225,35 +225,53 @@ export async function generateAudio(text, itemId) {
   }
 }
 
-// Colorize Image using Gemini Nano Banana (Flash Image)
-export async function colorizeImage(imageUrl) {
-  const colorModel = "gemini-2.5-flash-image"; // Official Nano Banana model
+// Process and Enhance Image (Upscale + Colorize) using Gemini Nano Banana
+export async function processAndEnhanceImage(imageInput) {
+  const colorModel = "gemini-2.5-flash-image"; 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${colorModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  // Note: For 2.5 flash image, strictly verify endpoint if standard generateContent works. 
+  // Often it's v1beta.
 
-  const imageHash = crypto.createHash("md5").update(imageUrl).digest("hex");
-  const filename = `color_cache_${imageHash}.png`;
-  const tmpDir = path.join(process.cwd(), "tmp", "color_cache");
+  let base64Image;
+  let cacheKey;
+
+  if (Buffer.isBuffer(imageInput)) {
+      base64Image = imageInput.toString('base64');
+      cacheKey = crypto.createHash("md5").update(imageInput).digest("hex");
+  } else if (typeof imageInput === 'string') {
+      // Assuming URL
+      cacheKey = crypto.createHash("md5").update(imageInput).digest("hex");
+      // Need to download if it's a URL
+      try {
+        console.log(`Downloading image for enhancement: ${imageInput}`);
+        const imgResponse = await axios.get(imageInput, { responseType: "arraybuffer" });
+        base64Image = Buffer.from(imgResponse.data).toString("base64");
+      } catch (e) {
+        console.error("Failed to download image for processing:", e.message);
+        return null; // Fail gracefully
+      }
+  } else {
+      console.error("Invalid input for processAndEnhanceImage");
+      return null;
+  }
+
+  const filename = `enhanced_${cacheKey}.png`;
+  const tmpDir = path.join(process.cwd(), "tmp", "enhanced_cache");
   const filePath = path.join(tmpDir, filename);
 
   if (fs.existsSync(filePath)) {
-    console.log(`Using cached colorized image: ${filename}`);
-    return filename;
+    console.log(`Using cached enhanced image: ${filename}`);
+    return filename; // Return filename, route will handle reading
   }
 
   try {
-    console.log(`Downloading image for colorization: ${imageUrl}`);
-    const imgResponse = await axios.get(imageUrl, {
-      responseType: "arraybuffer",
-    });
-    const base64Image = Buffer.from(imgResponse.data).toString("base64");
-
-    console.log(`Colorizing image via Nano Banana (${colorModel})...`);
+    console.log(`Enhancing image via ${colorModel} (Upscale + Colorize)...`);
     const payload = {
       contents: [
         {
           parts: [
             {
-              text: "Restore and colorize this black and white photo. Upscale the image to 1080p and 4K resolution using professional restoration techniques. Make the colors realistic and vibrant. Output ONLY the colorized image.",
+              text: "Upscale this image to 4K resolution. If the image is black and white, colorize it realistically. If it is already colored, enhance the quality and details. Output ONLY the processed image.",
             },
             { inlineData: { mimeType: "image/jpeg", data: base64Image } },
           ],
@@ -265,7 +283,7 @@ export async function colorizeImage(imageUrl) {
       },
     };
 
-    const response = await axios.post(url, payload, { timeout: 60000 });
+    const response = await axios.post(url, payload, { timeout: 120000 }); // Increased timeout for upscale
 
     if (
       response.data.candidates &&
@@ -273,21 +291,22 @@ export async function colorizeImage(imageUrl) {
     ) {
       const inlineData =
         response.data.candidates[0].content.parts[0].inlineData;
-      const colorImageData = inlineData.data;
-      const buffer = Buffer.from(colorImageData, "base64");
+      const enhancedImageData = inlineData.data;
+      const buffer = Buffer.from(enhancedImageData, "base64");
 
       if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
       }
 
       fs.writeFileSync(filePath, buffer);
-      console.log(`Colorized image saved to cache: ${filePath}`);
+      console.log(`Enhanced image saved to cache: ${filePath}`);
       return filename;
     } else {
       throw new Error("No image data in response");
     }
   } catch (error) {
-    console.error("Colorization failed:", error.message);
+    console.error("Image Enhancement failed:", error.message);
+    if (error.response) console.error(error.response.data);
     return null;
   }
 }

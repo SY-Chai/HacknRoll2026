@@ -6,8 +6,10 @@ import { supabase } from '../config/supabase.js';
 import { r2Client, R2_BUCKETS, R2_DOMAINS } from '../config/r2.js';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { searchPhotographs } from '../scraper/nasScraper.js';
-import { enhanceDescription } from '../agent/researchAgent.js';
+import { enhanceDescription, processAndEnhanceImage } from '../agent/researchAgent.js';
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -48,10 +50,7 @@ router.post('/search', async (req, res) => {
         }
 
         // 2. No existing journal, Scrape & Create
-        const rawResults = await searchPhotographs(query, undefined, undefined, 5); // Limit 5 for speed
-        const results = rawResults.slice(0, 5); // Ensure max 5
-
-        // Create Journal Entry
+        // Create Journal Entry immediately
         const { data: journal, error: journalError } = await supabase
             .from('Journal')
             .insert({ query: query, user_created: false })
@@ -60,53 +59,86 @@ router.post('/search', async (req, res) => {
 
         if (journalError) throw journalError;
 
-        const records = [];
-        // Sequential to avoid rate limits? Or Parallel? Parallel is faster.
-        await Promise.all(results.map(async (item) => {
-             // 1. Enhance Description
-             let description = item.tempTitle;
-             try {
-                description = await enhanceDescription(item.title || item.tempTitle, item.date || "Unknown Date");
-             } catch (descErr) {
-                console.warn(`Description enhancement failed for ${item.url}`);
-             }
+        console.log(`[Journal] Created Journal ID: ${journal.id}. Starting background processing...`);
+        res.json({ success: true, journalId: journal.id }); // Respond immediately
 
-             // 2. Upload Image to R2
-             let imageUrl = item.imageUrl;
-             try {
-                const imgRes = await axios.get(item.imageUrl, { responseType: 'arraybuffer' });
-                const buffer = Buffer.from(imgRes.data);
-                const file = {
-                    buffer: buffer,
-                    originalname: `scraped_${Date.now()}.jpg`, // Default name
-                    mimetype: imgRes.headers['content-type'] || 'image/jpeg'
+        // --- Background Processing ---
+        (async () => {
+            try {
+                // Define Streaming Callback
+                const processItem = async (item) => {
+                    console.log(`[Journal ${journal.id}] Processing item: ${item.title}`);
+                    
+                    // 1. Enhance Description
+                    let description = item.tempTitle;
+                    try {
+                        description = await enhanceDescription(item.title || item.tempTitle, item.date || "Unknown Date");
+                    } catch (descErr) {
+                        console.warn(`Description enhancement failed for ${item.url}`);
+                    }
+
+                    // 2. Upload Image to R2 (Upscaled + Colorized)
+                    let imageUrl = item.imageUrl;
+                    try {
+                        const imgRes = await axios.get(item.imageUrl, { responseType: 'arraybuffer' });
+                        const originalBuffer = Buffer.from(imgRes.data);
+
+                        // Process Image (Upscale + Colorize)
+                        let finalBuffer = originalBuffer;
+                        let mimeType = imgRes.headers['content-type'] || 'image/jpeg';
+                        
+                        try {
+                            const enhancedFilename = await processAndEnhanceImage(originalBuffer);
+                            if (enhancedFilename) {
+                                const enhancedPath = path.join(process.cwd(), 'tmp', 'enhanced_cache', enhancedFilename);
+                                if (fs.existsSync(enhancedPath)) {
+                                    finalBuffer = fs.readFileSync(enhancedPath);
+                                    mimeType = 'image/png'; // Enhanced output is PNG
+                                }
+                            }
+                        } catch (processingErr) {
+                            console.warn(`Processing failed for ${item.imageUrl}, falling back to original.`, processingErr.message);
+                        }
+
+                        const file = {
+                            buffer: finalBuffer,
+                            originalname: `record_${Date.now()}.${mimeType.split('/')[1] || 'jpg'}`,
+                            mimetype: mimeType
+                        };
+
+                        const key = await uploadToR2(file, R2_BUCKETS.IMAGE);
+                        imageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
+
+                    } catch (imgErr) {
+                        console.warn(`Image upload to R2 failed for ${item.imageUrl}:`, imgErr.message);
+                    }
+
+                    // Insert Record Incremental
+                    const record = {
+                        journal_id: journal.id,
+                        title: item.title || item.tempTitle,
+                        description: description,
+                        image_url: imageUrl,
+                        audio_url: null,
+                        splat_url: null
+                    };
+
+                    const { error: insertError } = await supabase.from('Record').insert(record);
+                    if (insertError) console.error(`Failed to insert record for ${item.title}:`, insertError.message);
+                    else console.log(`[Journal ${journal.id}] Record inserted: ${item.title}`);
                 };
-                const key = await uploadToR2(file, R2_BUCKETS.IMAGE);
-                imageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
-             } catch (imgErr) {
-                 console.warn(`Image upload to R2 failed for ${item.imageUrl}:`, imgErr.message);
-                 // Fallback to original URL if upload fails? Or null?
-                 // User wants R2, so if fail, maybe keep original or fail?
-                 // Keeping original allows app to still work.
-             }
 
-            records.push({
-                journal_id: journal.id,
-                title: item.title || item.tempTitle,
-                description: description,
-                image_url: imageUrl,
-                audio_url: null
-            });
-        }));
+                // Trigger Scraper with Streaming Callback
+                // The scraper will await 'processItem', which now returns quickly (after insert),
+                // ensuring order 1->2->3 is preserved in DB IDs.
+                await searchPhotographs(query, undefined, undefined, 5, processItem);
+                
+                console.log(`[Journal ${journal.id}] Scraper finished. Background tasks may still be running.`);
 
-        // Insert Records
-        if (records.length > 0) {
-            const { error: recordsError } = await supabase.from('Record').insert(records);
-            if (recordsError) throw recordsError;
-        }
-
-        console.log(`[Journal] Created Journal ID: ${journal.id} with ${records.length} records.`);
-        res.json({ success: true, journalId: journal.id });
+            } catch (bgError) {
+                console.error(`[Journal ${journal.id}] Background processing failed:`, bgError);
+            }
+        })();
 
     } catch (error) {
         console.error("Search failed:", error);
@@ -139,6 +171,8 @@ router.post('/create', upload.any(), async (req, res) => {
         // `items`: JSON string `[{title, desc}, {title, desc}]`
         // Files: `image_0`, `audio_0`, `image_1`, `audio_1`...
 
+        const records = [];
+
         for (let i = 0; i < parsedItems.length; i++) {
             const itemMetadata = parsedItems[i];
             
@@ -146,7 +180,30 @@ router.post('/create', upload.any(), async (req, res) => {
             const imageFile = files.find(f => f.fieldname === `image_${i}`);
             let imageUrl = null;
             if (imageFile) {
-                const key = await uploadToR2(imageFile, R2_BUCKETS.IMAGE);
+                // Process Image (Upscale + Colorize)
+                let finalBuffer = imageFile.buffer;
+                let mimeType = imageFile.mimetype;
+
+                try {
+                    const enhancedFilename = await processAndEnhanceImage(imageFile.buffer);
+                    if (enhancedFilename) {
+                        const enhancedPath = path.join(process.cwd(), 'tmp', 'enhanced_cache', enhancedFilename);
+                        if (fs.existsSync(enhancedPath)) {
+                            finalBuffer = fs.readFileSync(enhancedPath);
+                            mimeType = 'image/png'; // Enhanced output is PNG
+                        }
+                    }
+                } catch (processingErr) {
+                    console.warn(`Processing failed for uploaded image_${i}, using original.`, processingErr.message);
+                }
+
+                const fileToUpload = {
+                    buffer: finalBuffer,
+                    originalname: `user_upload_${Date.now()}.${mimeType.split('/')[1] || 'jpg'}`,
+                    mimetype: mimeType
+                };
+
+                const key = await uploadToR2(fileToUpload, R2_BUCKETS.IMAGE);
                 imageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
             }
 
@@ -193,15 +250,17 @@ router.get('/:id', async (req, res) => {
             .from('Journal')
             .select('*')
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (journalError) throw journalError;
+        if (!journal) return res.status(404).json({ error: "Journal not found" });
 
         // Fetch Records
         const { data: records, error: recordsError } = await supabase
             .from('Record')
             .select('*')
-            .eq('journal_id', id);
+            .eq('journal_id', id)
+            .order('id', { ascending: true });
 
         if (recordsError) throw recordsError;
 

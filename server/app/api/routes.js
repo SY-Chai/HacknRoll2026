@@ -2,14 +2,13 @@ import express from 'express';
 import axios from 'axios';
 import multer from 'multer';
 import { searchPhotographs } from '../scraper/nasScraper.js';
-import { enhanceDescription, generateAudio, colorizeImage } from '../agent/researchAgent.js';
+import { enhanceDescription, generateAudio, processAndEnhanceImage } from '../agent/researchAgent.js';
 import { supabase } from '../config/supabase.js';
 import { r2Client, R2_BUCKETS, R2_DOMAINS } from '../config/r2.js';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { generate3DGaussians } from '../services/sharpService.js';
 import fs from 'fs';
 import path from 'path';
-import { generate3DGaussians } from "../services/sharpService.js";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -261,14 +260,14 @@ router.post("/colorize-image", async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "Image URL is required" });
 
-    console.log(`Colorizing image on-demand: ${url}`);
-    const colorizedFile = await colorizeImage(url);
+    console.log(`Processing/Enhancing image on-demand: ${url}`);
+    const colorizedFile = await processAndEnhanceImage(url);
 
     if (!colorizedFile) {
-      return res.status(500).json({ error: "Colorization failed" });
+      return res.status(500).json({ error: "Processing/Colorization failed" });
     }
 
-    res.json({ success: true, colorUrl: `/color/${colorizedFile}` });
+    res.json({ success: true, colorUrl: `/enhanced_cache/${colorizedFile}` }); // Changed from /color/ to /enhanced_cache/
   } catch (error) {
     console.error("Colorize API Error:", error);
     res.status(500).json({ error: error.message });
@@ -278,7 +277,7 @@ router.post("/colorize-image", async (req, res) => {
 // New Endpoint: Generate 3D Gaussians (SHARP)
 router.post("/generate-3d", async (req, res) => {
   try {
-    const { imageUrls, recordId } = req.body;
+    const { imageUrls } = req.body;
     if (!imageUrls || !Array.isArray(imageUrls)) {
       return res.status(400).json({ error: "imageUrls array is required" });
     }
@@ -286,61 +285,11 @@ router.post("/generate-3d", async (req, res) => {
     console.log(`Generating 3D Gaussians for ${imageUrls.length} images...`);
     const results = await generate3DGaussians(imageUrls);
 
-    if (!results || results.length === 0) {
-      return res.status(500).json({ error: "3D generation failed or returned no results" });
+    if (!results) {
+      return res.status(500).json({ error: "3D generation failed" });
     }
 
-    // Process results: Download -> Upload to R2 -> Update DB
-    const finalResults = await Promise.all(results.map(async (result) => {
-      if (!result || !result.ply_url) return null;
-
-      try {
-        // 1. Download PLY from Sharp
-        console.log(`Downloading PLY from: ${result.ply_url}`);
-        const plyResponse = await axios.get(result.ply_url, { responseType: 'arraybuffer' });
-        const plyBuffer = Buffer.from(plyResponse.data);
-
-        // 2. Upload to R2
-        if (!R2_BUCKETS.SPLAT) {
-             console.warn("⚠️ R2 Splat Bucket not configured. Returning original URL.");
-             return result;
-        }
-
-        const key = `splat-${recordId || Date.now()}-${Date.now()}.ply`;
-        const command = new PutObjectCommand({
-            Bucket: R2_BUCKETS.SPLAT,
-            Key: key,
-            Body: plyBuffer,
-            ContentType: 'application/octet-stream' // PLY is binary
-        });
-
-        await r2Client.send(command);
-        const r2Url = `${R2_DOMAINS.SPLAT}/${key}`;
-        console.log(`Splat uploaded to R2: ${r2Url}`);
-
-        // 3. Update DB
-        if (recordId) {
-            const { error: updateError } = await supabase
-                .from('Record')
-                .update({ splat_url: r2Url })
-                .eq('id', recordId);
-            
-            if (updateError) console.error("Failed to update Record with splat URL:", updateError);
-            else console.log(`DB updated for record ${recordId} with splat URL`);
-        }
-
-        return {
-            ...result,
-            ply_url: r2Url // Return R2 URL
-        };
-
-      } catch (err) {
-        console.error("Failed to process/upload splat:", err);
-        return result; // Fallback to original if R2 upload fails
-      }
-    }));
-
-    res.json({ success: true, results: finalResults });
+    res.json({ success: true, results });
   } catch (error) {
     console.error("Generate 3D API Error:", error);
     res.status(500).json({ error: error.message });

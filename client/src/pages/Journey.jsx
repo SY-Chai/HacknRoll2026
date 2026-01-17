@@ -15,7 +15,8 @@ export default function Journey() {
   useEffect(() => {
     const fetchJournal = async () => {
       if (!id) return;
-      setIsLoading(true);
+      // Don't set isLoading(true) here on subsequent polls, only initial
+
       try {
         const res = await fetch(`/api/journal/${id}`);
         if (!res.ok) throw new Error("Journal not found");
@@ -35,10 +36,16 @@ export default function Journey() {
           isColorMode: false
         }));
 
-        console.log("Mapped Chapters:", mappedChapters);
-        if (mappedChapters.length === 0) console.warn("No chapters found in journal!");
-
+        console.log(`Fetched ${mappedChapters.length} chapters.`);
         setChapters(mappedChapters);
+
+        // Polling Logic: If less than 5 records (assuming 5 is target), convert to poll
+        // But for generic usage, maybe just stop if we verify all done? 
+        // For now, simpler: Poll if we have 0 records, or verify some "status" field if we had one.
+        // Let's assume user searches for 5 items. If < 5, keep polling? 
+        // Or cleaner: Poll every 3 seconds for the first 30 seconds?
+        // Let's implement active polling if mappedChapters < 5 (our limit) && loop count < max
+
       } catch (err) {
         console.error("Failed to load journal:", err);
         setError(err.message);
@@ -47,7 +54,18 @@ export default function Journey() {
       }
     };
 
+    // Initial Fetch
     fetchJournal();
+
+    // Polling Interval
+    const intervalId = setInterval(() => {
+      // Simple polling: Fetch every 3 seconds to check for new records
+      // Ideally we would check a "status" on the journal, but checking record count is a decent proxy for now
+      fetchJournal();
+    }, 3000);
+
+    // Cleanup
+    return () => clearInterval(intervalId);
   }, [id]);
 
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
@@ -204,16 +222,19 @@ export default function Journey() {
 
   /* --- Audio Logic End --- */
 
-  if (isLoading) {
+  if (isLoading || (chapters.length === 0 && !error)) {
     return (
       <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
         <Loader2 size={48} className="spinner" />
-        <p style={{ marginTop: '16px' }}>Restoring Memory...</p>
+        <p style={{ marginTop: '16px' }}>{chapters.length === 0 ? "Searching Archives & Restoring Memories..." : "Loading Journey..."}</p>
+        {chapters.length === 0 && (
+          <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '8px' }}>This may take a few moments.</p>
+        )}
       </div>
     );
   }
 
-  if (error || chapters.length === 0) {
+  if (error) {
     return (
       <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
         <p>{error || "No journey data found."}</p>
