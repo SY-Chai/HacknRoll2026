@@ -1,0 +1,22 @@
+# SHARP dependencies (most are installed via pip install -e . from the repo)
+# These are only needed if building outside of Docker or for local testing
+
+# Core ML
+torch>=2.1.0
+torchvision>=0.16.0
+
+# SHARP dependencies
+click>=8.0.0
+gsplat>=1.5.0
+imageio[ffmpeg]>=2.30.0
+matplotlib>=3.7.0
+pillow-heif>=0.10.0
+plyfile>=1.0.0
+scipy>=1.10.0
+timm>=0.9.0
+
+# RunPod serverless
+runpod>=1.6.0
+
+# HTTP requests (for image URL downloads)
+requests>=2.28.0
