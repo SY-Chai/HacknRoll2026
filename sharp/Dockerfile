@@ -46,8 +46,8 @@ RUN git clone https://github.com/apple/ml-sharp.git /app/ml-sharp
 WORKDIR /app/ml-sharp
 RUN pip install -e .
 
-# Install RunPod
-RUN pip install runpod requests
+# Install RunPod and S3 client
+RUN pip install runpod requests boto3
 
 # Copy handler code
 WORKDIR /app

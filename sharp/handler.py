@@ -5,7 +5,7 @@ SHARP: Single-image High-fidelity Appearance Reconstruction with Primitives
 Converts a single image into a 3D Gaussian Splatting representation.
 
 Input: Single image (base64 or URL)
-Output: PLY file containing 3D Gaussian Splat
+Output: PLY file uploaded to S3/R2, returns URL
 """
 
 import base64
@@ -14,8 +14,10 @@ import os
 import sys
 import tempfile
 import traceback
+import uuid
 from pathlib import Path
 
+import boto3
 import numpy as np
 import runpod
 import torch
@@ -104,6 +106,44 @@ def encode_file_to_base64(file_path: Path) -> str:
         return base64.b64encode(f.read()).decode("utf-8")
 
 
+def upload_to_r2(file_path: Path, key: str) -> str:
+    """
+    Upload file to Cloudflare R2.
+
+    Requires environment variables:
+    - CLOUDFLARE_R2_TOKEN (format: "access_key_id:secret_access_key")
+    - CLOUDFLARE_R2_ENDPOINT (e.g. "https://xxx.r2.cloudflarestorage.com")
+    - CLOUDFLARE_R2_BUCKET (e.g. "splats")
+    - CLOUDFLARE_R2_PUBLIC_URL (e.g. "https://pub-xxx.r2.dev")
+
+    Returns public URL.
+    """
+    r2_endpoint = os.environ["CLOUDFLARE_R2_ENDPOINT"]
+    r2_bucket = os.environ["CLOUDFLARE_R2_BUCKET"]
+    r2_public_url = os.environ["CLOUDFLARE_R2_PUBLIC_URL"]
+
+    # Parse token (format: "access_key_id:secret_access_key")
+    r2_token = os.environ["CLOUDFLARE_R2_TOKEN"]
+    access_key_id, secret_access_key = r2_token.split(":", 1)
+
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=r2_endpoint,
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+        region_name="auto",
+    )
+
+    s3_client.upload_file(
+        str(file_path),
+        r2_bucket,
+        key,
+        ExtraArgs={"ContentType": "application/octet-stream"},
+    )
+
+    return f"{r2_public_url.rstrip('/')}/{key}"
+
+
 @torch.no_grad()
 def predict_gaussians(predictor, image: np.ndarray, f_px: float, device: torch.device):
     """
@@ -181,10 +221,17 @@ def handler(job):
         }
     }
 
-    Output format:
+    Output format (with S3 configured):
     {
-        "ply": "<base64_encoded_ply_file>",
         "status": "success",
+        "ply_url": "https://your-bucket.s3.amazonaws.com/output.ply",
+        "num_gaussians": <int>
+    }
+
+    Output format (without S3, returns base64):
+    {
+        "status": "success",
+        "ply": "<base64_encoded_ply_file>",
         "num_gaussians": <int>
     }
     """
@@ -233,12 +280,16 @@ def handler(job):
             num_gaussians = gaussians.mean_vectors.shape[1]
             LOGGER.info(f"Generated {num_gaussians} Gaussians")
 
-            # Encode PLY to base64
-            ply_base64 = encode_file_to_base64(output_ply_path)
+            # Upload to Cloudflare R2
+            job_id = job.get("id", str(uuid.uuid4()))
+            r2_key = f"{job_id}.ply"
+
+            LOGGER.info(f"Uploading PLY to R2: {r2_key}")
+            ply_url = upload_to_r2(output_ply_path, r2_key)
 
             return {
                 "status": "success",
-                "ply": ply_base64,
+                "ply_url": ply_url,
                 "num_gaussians": num_gaussians,
                 "image_size": {"width": width, "height": height},
                 "focal_length_px": f_px,
