@@ -13,7 +13,6 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
 // In-memory lock to avoid concurrent requests for same text
 const pendingAudio = new Map();
-
 // Exa Search API
 async function searchExa(query) {
   try {
@@ -289,9 +288,6 @@ export async function colorizeImage(imageUrl) {
     }
   } catch (error) {
     console.error("Colorization failed:", error.message);
-    if (error.response) {
-      console.error("Error Details:", JSON.stringify(error.response.data));
-    }
     return null;
   }
 }

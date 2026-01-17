@@ -34,6 +34,7 @@ router.get('/proxy-image', async (req, res) => {
   }
 });
 
+// Original Search Endpoint (Kept for backward compatibility/debugging)
 router.get('/search', async (req, res) => {
   try {
     const { q, start, end, limit } = req.query;
@@ -52,7 +53,6 @@ router.get('/search', async (req, res) => {
     // 1. Scrape basic results
     const results = await searchPhotographs(q, startDate, endDate, resultLimit);
 
-    // 2. Enhance with AI descriptions
     // 2. Enhance with AI descriptions
     console.log('Enhancing results with AI...');
     const enhancedResults = await Promise.all(results.map(async (item, index) => {
@@ -126,5 +126,4 @@ router.post('/colorize-image', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 export default router;

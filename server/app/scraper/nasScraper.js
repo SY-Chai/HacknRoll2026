@@ -3,17 +3,64 @@ import * as cheerio from 'cheerio';
 
 const BASE_URL = 'https://www.nas.gov.sg/archivesonline/photographs/search-result';
 
+// Helper to check if image is a photograph using GPT-4o-mini
+async function isPhotograph(url) {
+  try {
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    if (!openaiApiKey) return true; // Fail open
+
+    // 1. Download image to buffer (Bypass NAS blocks)
+    const imageResponse = await axios.get(url, {
+      responseType: 'arraybuffer',
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      timeout: 5000
+    });
+
+    // 2. Convert to Base64
+    const base64Image = Buffer.from(imageResponse.data).toString('base64');
+    const mimeType = 'image/jpeg'; // Checking suffix could be better but NAS is mostly jpg
+
+    // 3. Analyze with OpenAI
+    const response = await axios.post("https://api.openai.com/v1/chat/completions", {
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Is this image a ground-level photograph? Reply strictly with 'PHOTOGRAPH'. Reply 'OTHER' if it is an aerial view, bird's-eye view, map, document, poster, or illustration." },
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+          ]
+        }
+      ],
+      max_tokens: 10
+    }, {
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${openaiApiKey}`
+      },
+      timeout: 10000
+    });
+
+    const answer = response.data.choices[0].message.content;
+    const isPhoto = answer.includes('PHOTOGRAPH');
+    if (!isPhoto) console.log(`[Visual Filter] Rejected: ${url}`);
+    return isPhoto;
+
+  } catch (error) {
+    console.warn(`Visual Filter Warning for ${url}: ${error.message}`);
+    return true; // Keep image on error (Fail Open)
+  }
+}
 // Updated default limit to 8 as requested
 export async function searchPhotographs(keywords, startDate, endDate, limit = 10) {
   try {
     // 1. Configure Search Parameters
-    // We request MORE than the limit (e.g., 20) to create a buffer.
-    // This allows us to skip duplicates and still reach the target of 8 unique items.
+    // We request MORE candidates (100) to account for Visual Filtering rejections and duplicates.
     const params = {
       'search-type': 'advanced',
       'keywords': keywords,
       'keywords-type': 'all',
-      'max-display': '30'
+      'max-display': '100'
     };
 
     if (startDate) params['date-from'] = startDate;
@@ -114,7 +161,14 @@ export async function searchPhotographs(keywords, startDate, endDate, limit = 10
           continue; // Move to the next candidate (finding a "new one")
         }
 
-        // If unique, add to results
+        // 6. Visual Filter (GPT-4o-mini)
+        // Check if it's a real photograph before adding
+        const isValidPhoto = await isPhotograph(item.imageUrl);
+        if (!isValidPhoto) {
+          continue;
+        }
+
+        // If unique and valid, add to results
         seenTitles.add(finalTitle);
         finalResults.push({
           title: finalTitle,
