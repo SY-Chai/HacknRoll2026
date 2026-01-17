@@ -43,15 +43,29 @@ app.get('/api/scrape', async (req, res) => {
             let imgUrl = imgEl.attr('src');
 
             // Fix relative URLs
+            // Fix relative URLs
             if (imgUrl && !imgUrl.startsWith('http')) {
-                imgUrl = `https://www.nas.gov.sg${imgUrl}`;
+                if (imgUrl.startsWith('//')) {
+                    imgUrl = `https:${imgUrl}`;
+                } else {
+                    imgUrl = `https://www.nas.gov.sg${imgUrl}`;
+                }
             }
 
             if (title && imgUrl) {
+                let linkUrl = titleEl.attr('href');
+                if (linkUrl && !linkUrl.startsWith('http')) {
+                    if (linkUrl.startsWith('//')) {
+                        linkUrl = `https:${linkUrl}`;
+                    } else {
+                        linkUrl = `https://www.nas.gov.sg${linkUrl}`;
+                    }
+                }
+
                 results.push({
                     title,
                     imageUrl: imgUrl,
-                    link: `https://www.nas.gov.sg${titleEl.attr('href')}`
+                    link: linkUrl
                 });
             }
         });
