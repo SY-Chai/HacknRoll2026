@@ -3,13 +3,13 @@ import * as cheerio from 'cheerio';
 
 const BASE_URL = 'https://www.nas.gov.sg/archivesonline/photographs/search-result';
 
-export async function searchPhotographs(keywords, startDate, endDate) {
+export async function searchPhotographs(keywords, startDate, endDate, limit = 100) {
   try {
     const params = {
       'search-type': 'advanced',
       'keywords': keywords,
       'keywords-type': 'all',
-      'max-display': 100 // Fetch up to 100 results per request
+      'max-display': '20' // Fetch minimum allowed by server to reduce load, we will slice later
     };
 
     if (startDate) {
@@ -58,24 +58,51 @@ export async function searchPhotographs(keywords, startDate, endDate) {
          if (dateMatch) date = dateMatch[1];
       }
 
-      if (title && imageSrc) {
+      // Process the URL
+      let fullLink = link;
+      if (link) {
+        if (link.startsWith('http')) {
+           fullLink = link;
+        } else if (link.startsWith('//')) {
+           fullLink = `https:${link}`;
+        } else if (link.startsWith('/')) {
+           // It's a root relative path.
+           // Check if it already includes /archivesonline or not to decide base
+           fullLink = `https://www.nas.gov.sg${link}`;
+        } else {
+           // Relative to current path?
+           fullLink = `https://www.nas.gov.sg/archivesonline/${link}`;
+        }
+      }
+
+      // Process the Image URL
+      let fullImageSrc = imageSrc;
+      if (imageSrc) {
+        if (imageSrc.startsWith('http')) {
+          fullImageSrc = imageSrc;
+        } else if (imageSrc.startsWith('//')) {
+          fullImageSrc = `https:${imageSrc}`;
+        } else if (imageSrc.startsWith('/')) {
+          fullImageSrc = `https://www.nas.gov.sg${imageSrc}`;
+        }
+        
+        // Remove 'a' from the end of the filename (e.g., img001a.jpg -> img001.jpg)
+        // This is often used to switch from a specific variant to the main image
+        fullImageSrc = fullImageSrc.replace(/a\.jpg$/i, '.jpg');
+      }
+
+      if (title && fullImageSrc) {
         results.push({
           title,
-          url: link ? `https://www.nas.gov.sg/archivesonline${link}` : null,
-          imageUrl: imageSrc, // Likely already absolute or relative, need to check.
-                             // If relative, prepend base.
+          url: fullLink,
+          imageUrl: fullImageSrc,
           date
         });
       }
     });
     
-    // Fix relative URLs if necessary
-    return results.map(item => {
-      if (item.imageUrl && !item.imageUrl.startsWith('http')) {
-        item.imageUrl = `https://www.nas.gov.sg${item.imageUrl}`;
-      }
-      return item;
-    });
+    // Slice results
+    return results.slice(0, limit);
 
   } catch (error) {
     console.error('Error in searchPhotographs:', error);
