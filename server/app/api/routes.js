@@ -22,19 +22,14 @@ router.get('/search', async (req, res) => {
     // 1. Scrape basic results
     const results = await searchPhotographs(q, startDate, endDate, resultLimit);
 
-    // 2. Enhance with AI descriptions and Audio
-    console.log('Enhancing results with AI (Text + Audio)...');
+    // 2. Enhance with AI descriptions
+    console.log('Enhancing results with AI...');
     const enhancedResults = await Promise.all(results.map(async (item, index) => {
       const description = await enhanceDescription(item.title, item.date);
       
-      // Generate audio
-      // Use a safe ID for filename (timestamp + index)
-      const audioFilename = await generateAudio(description, `item_${Date.now()}_${index}`);
-      
       return { 
         ...item, 
-        description,
-        audio: audioFilename ? `/audio/${audioFilename}` : null
+        description
       };
     }));
     

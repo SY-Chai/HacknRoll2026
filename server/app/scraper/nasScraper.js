@@ -101,8 +101,72 @@ export async function searchPhotographs(keywords, startDate, endDate, limit = 10
       }
     });
     
-    // Slice results
-    return results.slice(0, limit);
+    // Batched Processing to guarantee filling the limit without over-fetching
+    const uniqueResults = [];
+    const seenTitles = new Set();
+    let currentIndex = 0;
+    
+    // Process matches until we reach the limit or run out of candidates
+    while (uniqueResults.length < limit && currentIndex < results.length) {
+        // Prepare a batch (e.g., try to fetch enough to fill the remaining gap, plus a buffer)
+        // Buffer of 2 extra in case of duplicates in this batch
+        const remainingNeeded = limit - uniqueResults.length;
+        const batchSize = remainingNeeded + 2; 
+        
+        const batchCandidates = results.slice(currentIndex, currentIndex + batchSize);
+        currentIndex += batchSize; // Move pointer
+
+        if (batchCandidates.length === 0) break;
+
+        console.log(`Processing batch of ${batchCandidates.length} items (Needed: ${remainingNeeded})...`);
+
+        // Fetch details for this batch in parallel
+        const batchDetails = await Promise.all(batchCandidates.map(async (item) => {
+            try {
+                const detailResponse = await axios.get(item.url);
+                const $d = cheerio.load(detailResponse.data);
+                
+                let newTitle = null;
+                const label = $d('label').filter((i, el) => $d(el).text().includes('Unedited Description Supplied by Transferring Agency'));
+                
+                if (label.length > 0) {
+                    const nextDiv = label.next('div');
+                    if (nextDiv.length > 0) newTitle = nextDiv.text().trim();
+                }
+
+                if (!newTitle) {
+                    $d('td').each((i, el) => {
+                        if ($d(el).text().includes('Unedited Description Supplied by Transferring Agency')) {
+                            const nextTd = $d(el).next('td');
+                            if (nextTd.length > 0) newTitle = nextTd.text().trim();
+                        }
+                    });
+                }
+
+                return {
+                    ...item,
+                    title: newTitle || item.title,
+                    originalCaption: item.title
+                };
+            } catch (err) {
+                console.error(`Failed to fetch details for ${item.url}:`, err.message);
+                return item;
+            }
+        }));
+
+        // Add unique items from this batch to the final list
+        for (const item of batchDetails) {
+            if (uniqueResults.length >= limit) break; // Hard stop if filled during batch processing
+
+            const normalizedTitle = item.title.trim().toLowerCase();
+            if (!seenTitles.has(normalizedTitle)) {
+                seenTitles.add(normalizedTitle);
+                uniqueResults.push(item);
+            }
+        }
+    }
+
+    return uniqueResults;
 
   } catch (error) {
     console.error('Error in searchPhotographs:', error);
