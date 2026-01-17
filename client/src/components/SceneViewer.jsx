@@ -59,8 +59,6 @@ export default function SceneViewer({ visualFocus }) {
                 <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
                 <Environment preset="night" />
 
-                <PlaceholderModel type={visualFocus} />
-
                 <OrbitControls enableZoom={false} autoRotate autoRotateSpeed={0.5} />
             </Canvas>
         </div>

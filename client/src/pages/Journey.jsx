@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import SceneViewer from '../components/SceneViewer';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2 } from 'lucide-react';
 
 export default function Journey() {
     const { state } = useLocation();
@@ -12,28 +12,37 @@ export default function Journey() {
     const results = state?.results || (state?.result ? [state.result] : []);
     const query = state?.query || "Journey";
 
+    // Initialize chapters state from search results
+    // We map the incoming results to our internal "Chapter" format immediately
+    const initialChapters = results.map((item, index) => ({
+        id: index.toString(),
+        title: item.title,
+        text: item.description || "No description available.",
+        visualFocus: 'default',
+        // Use proxy for images to avoid CORs/Hotlink issues
+        img_url: item.imageUrl ? `/api/proxy-image?url=${encodeURIComponent(item.imageUrl)}` : null,
+        date: item.date,
+        audio_url: item.audio || null // Initialize as null if not provided
+    }));
+
+    // Use State for chapters to allow updating audio URLs dynamically
+    const [chapters, setChapters] = useState(initialChapters);
     const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
 
-    // Construct "Location" object from mapped search results
-    const locationData = results.length > 0 ? {
-        id: 'dynamic-search',
-        title: `Search: "${query}"`,
-        color: '#ffaa00',
-        chapters: results.map((item, index) => ({
-            id: index.toString(),
-            title: item.title,
-            text: item.description || "No description available.",
-            visualFocus: 'default',
-            img_url: item.imageUrl, // Fixed: Scraper returns 'imageUrl', not 'img_url'
-            date: item.date
-        }))
-    } : null;
+    // Audio State
+    const [isMuted, setIsMuted] = useState(true); // Default to Muted
+    const [audioProgress, setAudioProgress] = useState(0);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isAudioProcessing, setIsAudioProcessing] = useState(false);
 
-    const locationChapters = locationData ? locationData.chapters : [];
-    const currentChapter = locationChapters[currentChapterIndex];
+    // UI State
+    const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+
+    const audioRef = useRef(null);
+    const currentChapter = chapters[currentChapterIndex];
 
     // Handle missing state (e.g. refresh)
-    if (!locationData) {
+    if (chapters.length === 0) {
         return (
             <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
                 <p>No journey data found.</p>
@@ -48,15 +57,170 @@ export default function Journey() {
         );
     }
 
+    /* --- Audio Logic Start --- */
+
+    const stopAudio = () => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            setIsPlaying(false);
+            setAudioProgress(0);
+        }
+    };
+
+    const playAudio = (url) => {
+        if (!url) return;
+
+        // stopAudio(); // Don't fully reset, just change cue
+
+        // Construct full URL if it's relative
+        // Note: If you are using a proxy in Vite, relative URLs like /api/... work fine. 
+        // If the URL comes back as /api/tts/..., we use it directly.
+        // If it comes back as http..., we use it directly.
+        const fullUrl = url.startsWith('http') ? url : url;
+
+        // Only reload if source is different
+        // audioRef.current.src returns absolute path, so we check if it includes our url fragment
+        if (!audioRef.current.src.includes(url)) {
+            audioRef.current.src = fullUrl;
+            audioRef.current.load();
+        }
+
+        if (!isMuted) {
+            const playPromise = audioRef.current.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => setIsPlaying(true))
+                    .catch(e => console.error("Audio Play Error:", e));
+            }
+        }
+    };
+
+    // Initialize Audio and Listeners
+    useEffect(() => {
+        const audio = new Audio();
+        audioRef.current = audio;
+
+        const updateProgress = () => {
+            if (audio.duration) {
+                setAudioProgress(audio.currentTime / audio.duration);
+            }
+        };
+
+        const onEnd = () => {
+            setIsPlaying(false);
+            setAudioProgress(1);
+        };
+
+        audio.addEventListener('timeupdate', updateProgress);
+        audio.addEventListener('ended', onEnd);
+
+        return () => {
+            audio.removeEventListener('timeupdate', updateProgress);
+            audio.removeEventListener('ended', onEnd);
+            audio.pause();
+            audioRef.current = null;
+        };
+    }, []);
+
+    // Lazy Load Audio Logic
+    useEffect(() => {
+        if (!currentChapter) return;
+
+        const fetchAudioIfNeeded = async () => {
+            // If audio already exists, do nothing
+            if (currentChapter.audio_url) return;
+
+            // Start Processing
+            setIsAudioProcessing(true);
+            try {
+                // console.log(`Fetching audio for chapter: ${currentChapter.title}`);
+                // Using the URL structure compatible with the proxy setup if backend is on 3000
+                const response = await fetch('/api/generate-audio', { // Relative path uses Vite proxy
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: currentChapter.text,
+                        id: `${currentChapterIndex}_${Date.now()}` // Unique ID
+                    })
+                });
+
+                if (!response.ok) {
+                    // Silently fail or log if endpoint doesn't exist yet
+                    // throw new Error("Audio generation failed");
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.success && data.audioUrl) {
+                    // Update state with new audio URL
+                    setChapters(prevChapters => {
+                        const newChapters = [...prevChapters];
+                        newChapters[currentChapterIndex] = {
+                            ...newChapters[currentChapterIndex],
+                            audio_url: data.audioUrl
+                        };
+                        return newChapters;
+                    });
+                }
+            } catch (error) {
+                console.warn("Failed to fetch audio (Backend might not be ready):", error);
+            } finally {
+                setIsAudioProcessing(false);
+            }
+        };
+
+        fetchAudioIfNeeded();
+    }, [currentChapterIndex, currentChapter?.text]); // Depend on index and text content
+
+    // Handle Chapter Change or Mute Toggle (Playback Logic)
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio || !currentChapter) return;
+
+        // If we have an audio URL, try to play it (or respect mute)
+        if (currentChapter.audio_url) {
+            const currentSrc = audio.src;
+            // Check if we need to switch sources
+            // Only switch if the current player source doesn't match the chapter's audio
+            if (!currentSrc.includes(currentChapter.audio_url)) {
+                playAudio(currentChapter.audio_url);
+            } else {
+                // Same source, toggle play/pause based on mute
+                if (isMuted) {
+                    audio.pause();
+                    setIsPlaying(false);
+                } else {
+                    if (audio.paused) {
+                        const playPromise = audio.play();
+                        if (playPromise !== undefined) {
+                            playPromise
+                                .then(() => setIsPlaying(true))
+                                .catch(e => console.error("Audio Play Error:", e));
+                        }
+                    }
+                }
+            }
+        } else {
+            // No audio URL yet, ensure we stop previous
+            stopAudio();
+        }
+    }, [currentChapterIndex, isMuted, currentChapter?.audio_url]);
+
+    /* --- Audio Logic End --- */
+
+
     const nextChapter = () => {
-        if (currentChapterIndex < locationChapters.length - 1) {
+        if (currentChapterIndex < chapters.length - 1) {
             setCurrentChapterIndex(prev => prev + 1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
 
     const prevChapter = () => {
         if (currentChapterIndex > 0) {
             setCurrentChapterIndex(prev => prev - 1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
 
@@ -64,7 +228,7 @@ export default function Journey() {
         <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
             <SceneViewer visualFocus={currentChapter.visualFocus} />
 
-            {/* Header: Title */}
+            {/* Header: Title & Controls */}
             <div style={{ padding: '24px', zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <button onClick={() => navigate('/')} className="glass-panel" style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
                     <HomeIcon size={20} />
@@ -75,7 +239,32 @@ export default function Journey() {
                         {currentChapter.title}
                     </h1>
                 </div>
-                <div style={{ width: 80 }}></div> {/* Spacer */}
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    {/* Audio Controls */}
+                    {isAudioProcessing ? (
+                        <div className="glass-panel" style={{ padding: '12px', color: 'var(--text-muted)', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <Loader2 size={16} className="spinner" />
+                            <span style={{ fontSize: '0.8rem' }}>Generating Voice...</span>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => setIsMuted(!isMuted)}
+                            className="glass-panel"
+                            disabled={!currentChapter.audio_url}
+                            style={{
+                                padding: '12px',
+                                color: 'white',
+                                cursor: currentChapter.audio_url ? 'pointer' : 'not-allowed',
+                                opacity: currentChapter.audio_url ? 1 : 0.5,
+                                display: 'flex',
+                                alignItems: 'center'
+                            }}
+                        >
+                            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Main Content: 3-Image Carousel */}
@@ -83,7 +272,7 @@ export default function Journey() {
 
                 {/* Previous Image (Left, Blurred) */}
                 <AnimatePresence>
-                    {currentChapterIndex > 0 && locationChapters[currentChapterIndex - 1] && (
+                    {currentChapterIndex > 0 && chapters[currentChapterIndex - 1] && (
                         <motion.div
                             key={`prev-${currentChapterIndex}`}
                             initial={{ opacity: 0, x: -100, scale: 0.8 }}
@@ -102,7 +291,7 @@ export default function Journey() {
                             }}
                         >
                             <img
-                                src={locationChapters[currentChapterIndex - 1].img_url}
+                                src={chapters[currentChapterIndex - 1].img_url}
                                 alt="Previous"
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
@@ -130,6 +319,7 @@ export default function Journey() {
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', x: 0 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    onClick={() => currentChapter.img_url && setIsLightboxOpen(true)}
                     style={{
                         height: '70%',
                         aspectRatio: '4/3',
@@ -138,30 +328,47 @@ export default function Journey() {
                         boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
                         border: '4px solid rgba(255,255,255,0.1)',
                         zIndex: 15,
-                        background: '#111'
+                        background: '#111',
+                        cursor: 'zoom-in',
+                        position: 'relative'
                     }}
                 >
                     {currentChapter.img_url ? (
-                        <img
-                            src={currentChapter.img_url}
-                            alt={currentChapter.title}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
+                        <>
+                            <img
+                                src={currentChapter.img_url}
+                                alt={currentChapter.title}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            {/* Hover hint */}
+                            <div className="hover-hint" style={{
+                                position: 'absolute', top: 12, right: 12,
+                                background: 'rgba(0,0,0,0.6)', borderRadius: '50%', padding: '8px',
+                                opacity: 0, transition: 'opacity 0.2s'
+                            }}>
+                                <Maximize2 size={20} color="white" />
+                            </div>
+                        </>
                     ) : (
                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#222' }}>
                             <p style={{ color: '#666' }}>No Image</p>
                         </div>
                     )}
                 </motion.div>
+                {/* Style injection for hover effect since we are using inline mostly */}
+                <style>{`
+                    .hover-hint { opacity: 0; }
+                    div[style*="cursor: zoom-in"]:hover .hover-hint { opacity: 1 !important; }
+                `}</style>
 
                 {/* Right Arrow */}
                 <button
                     onClick={nextChapter}
-                    disabled={currentChapterIndex === locationChapters.length - 1}
+                    disabled={currentChapterIndex === chapters.length - 1}
                     style={{
                         position: 'absolute', right: '10%',
                         background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', padding: '12px',
-                        color: 'white', opacity: currentChapterIndex === locationChapters.length - 1 ? 0 : 1, cursor: 'pointer', zIndex: 20
+                        color: 'white', opacity: currentChapterIndex === chapters.length - 1 ? 0 : 1, cursor: 'pointer', zIndex: 20
                     }}
                 >
                     <ChevronRight size={32} />
@@ -169,7 +376,7 @@ export default function Journey() {
 
                 {/* Next Image (Right, Blurred) */}
                 <AnimatePresence>
-                    {currentChapterIndex < locationChapters.length - 1 && locationChapters[currentChapterIndex + 1] && (
+                    {currentChapterIndex < chapters.length - 1 && chapters[currentChapterIndex + 1] && (
                         <motion.div
                             key={`next-${currentChapterIndex}`}
                             initial={{ opacity: 0, x: 100, scale: 0.8 }}
@@ -188,7 +395,7 @@ export default function Journey() {
                             }}
                         >
                             <img
-                                src={locationChapters[currentChapterIndex + 1].img_url}
+                                src={chapters[currentChapterIndex + 1].img_url}
                                 alt="Next"
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
@@ -199,27 +406,132 @@ export default function Journey() {
             </div>
 
             {/* Footer: Description */}
-            <div style={{ padding: '24px 48px', zIndex: 10, textAlign: 'center', background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)' }}>
-                <motion.p
+            <div style={{
+                padding: '24px 48px',
+                zIndex: 10,
+                textAlign: 'center',
+                background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)',
+                maxHeight: '35vh',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+                flexShrink: 0
+            }}>
+                <motion.div
                     key={currentChapter.text}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="glass-panel"
+                    className="glass-panel custom-scrollbar"
                     style={{
-                        maxWidth: '800px',
+                        maxWidth: '1000px',
+                        width: '90vw',
                         margin: '0 auto',
                         padding: '16px 24px',
-                        fontSize: '1.1rem',
+                        fontSize: '1rem',
                         color: '#ddd',
-                        lineHeight: 1.6
+                        lineHeight: 1.6,
+                        overflowY: 'auto',
+                        maxHeight: '100%'
                     }}
                 >
                     {currentChapter.text}
-                </motion.p>
-                <div style={{ marginTop: '12px', fontSize: '0.9rem', color: '#888' }}>
-                    {currentChapter.date}
+                </motion.div>
+
+                {/* Meta Info & Audio Progress */}
+                <div style={{ marginTop: '12px', width: '100%', maxWidth: '800px', margin: '12px auto 0' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#888', marginBottom: '8px' }}>
+                        {currentChapter.date}
+                    </div>
+
+                    {/* Audio Progress Bar */}
+                    <div style={{
+                        width: '100%',
+                        height: '4px',
+                        background: 'rgba(255,255,255,0.1)',
+                        borderRadius: '2px',
+                        overflow: 'hidden',
+                        opacity: (audioProgress > 0 && isPlaying) ? 1 : 0,
+                        transition: 'opacity 0.3s'
+                    }}>
+                        <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${audioProgress * 100}%` }}
+                            transition={{ ease: "linear", duration: 0.1 }}
+                            style={{
+                                height: '100%',
+                                background: '#ffaa00'
+                            }}
+                        />
+                    </div>
                 </div>
             </div>
+
+            {/* Lightbox Overlay */}
+            <AnimatePresence>
+                {isLightboxOpen && currentChapter.img_url && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        style={{
+                            position: 'fixed',
+                            top: 0, left: 0,
+                            width: '100vw', height: '100vh',
+                            background: 'rgba(0,0,0,0.95)',
+                            zIndex: 100,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '40px'
+                        }}
+                        onClick={() => setIsLightboxOpen(false)}
+                    >
+                        {/* Close Button */}
+                        <button
+                            onClick={() => setIsLightboxOpen(false)}
+                            style={{
+                                position: 'absolute',
+                                top: '24px',
+                                right: '24px',
+                                background: 'rgba(255,255,255,0.1)',
+                                border: 'none',
+                                borderRadius: '50%',
+                                padding: '12px',
+                                color: 'white',
+                                cursor: 'pointer',
+                                zIndex: 110
+                            }}
+                        >
+                            <X size={32} />
+                        </button>
+
+                        <motion.img
+                            src={currentChapter.img_url}
+                            alt={currentChapter.title}
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.8, opacity: 0 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                            style={{
+                                maxWidth: '100%',
+                                maxHeight: '100%',
+                                borderRadius: '4px',
+                                boxShadow: '0 0 50px rgba(0,0,0,0.5)',
+                                cursor: 'default'
+                            }}
+                            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+                        />
+
+                        {/* Caption in Lightbox */}
+                        <div style={{ position: 'absolute', bottom: '40px', left: 0, width: '100%', textAlign: 'center', pointerEvents: 'none' }}>
+                            <span style={{ background: 'rgba(0,0,0,0.6)', padding: '8px 16px', borderRadius: '20px', color: 'white' }}>
+                                {currentChapter.title}
+                            </span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
         </div>
     );
