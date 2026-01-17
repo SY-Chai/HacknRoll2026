@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import SceneViewer from '../components/SceneViewer';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause } from 'lucide-react';
 
 export default function Journey() {
     const { state } = useLocation();
@@ -30,7 +30,7 @@ export default function Journey() {
     const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
 
     // Audio State
-    const [isMuted, setIsMuted] = useState(true); // Default to Muted
+    const [isMuted, setIsMuted] = useState(true); // Default to Muted (User must press play)
     const [audioProgress, setAudioProgress] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isAudioProcessing, setIsAudioProcessing] = useState(false);
@@ -253,15 +253,22 @@ export default function Journey() {
                             className="glass-panel"
                             disabled={!currentChapter.audio_url}
                             style={{
-                                padding: '12px',
+                                padding: '12px 24px',
+                                background: isMuted ? 'rgba(255, 170, 0, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                                border: isMuted ? '1px solid rgba(255, 170, 0, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
                                 color: 'white',
                                 cursor: currentChapter.audio_url ? 'pointer' : 'not-allowed',
                                 opacity: currentChapter.audio_url ? 1 : 0.5,
                                 display: 'flex',
-                                alignItems: 'center'
+                                alignItems: 'center',
+                                gap: '10px',
+                                transition: 'all 0.3s ease'
                             }}
                         >
-                            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                            {isMuted ? <Play size={20} fill="currentColor" /> : <Pause size={20} fill="currentColor" />}
+                            <span style={{ fontWeight: 600 }}>
+                                {isMuted ? 'Play Narration' : 'Pause Narration'}
+                            </span>
                         </button>
                     )}
                 </div>
