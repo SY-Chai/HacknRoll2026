@@ -1,0 +1,16 @@
+{
+    "rewrites": [
+        {
+            "source": "/api/(.*)",
+            "destination": "https://hacknroll2026-bs5g.onrender.com/api/$1"
+        },
+        {
+            "source": "/audio/(.*)",
+            "destination": "https://hacknroll2026-bs5g.onrender.com/audio/$1"
+        },
+        {
+            "source": "/color/(.*)",
+            "destination": "https://hacknroll2026-bs5g.onrender.com/color/$1"
+        }
+    ]
+}
