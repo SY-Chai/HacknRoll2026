@@ -2,7 +2,7 @@ import express from 'express';
 import axios from 'axios';
 import multer from 'multer';
 import { searchPhotographs } from '../scraper/nasScraper.js';
-import { enhanceDescription, generateAudio, colorizeImage } from '../agent/researchAgent.js';
+import { enhanceDescription, generateAudio, enhanceImage } from '../agent/researchAgent.js';
 import { supabase } from '../config/supabase.js';
 import { r2Client, R2_BUCKETS, R2_DOMAINS } from '../config/r2.js';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
@@ -235,6 +235,14 @@ router.post("/generate-audio", async (req, res) => {
       finalAudioUrl = `${R2_DOMAINS.AUDIO}/${key}`;
       console.log(`Audio uploaded to R2: ${finalAudioUrl}`);
 
+      // Clean up local temp file
+      try {
+          fs.unlinkSync(filePath);
+          console.log(`Cleaned up local audio file: ${filePath}`);
+      } catch (cleanupErr) {
+          console.warn("Failed to cleanup temp audio:", cleanupErr);
+      }
+
       // Update DB if recordId provided
       if (recordId) {
         const { error: updateError } = await supabase
@@ -258,22 +266,62 @@ router.post("/generate-audio", async (req, res) => {
   }
 });
 
-// New Endpoint: Colorize Image via Nano Banana
+// New Endpoint: Enhance/Colorize Image via Nano Banana
 router.post("/colorize-image", async (req, res) => {
   try {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "Image URL is required" });
 
-    console.log(`Colorizing image on-demand: ${url}`);
-    const colorizedFile = await colorizeImage(url);
+    console.log(`Enhancing image on-demand: ${url}`);
+    
+    // Import dynamically or assume it was updated in the file above
+    // note: we simplified the import in this file previously? No, it's defined in researchAgent
+    // We need to use 'enhanceImage' which we just renamed 'colorizeImage' to.
+    
+    const enhancedFilename = await import('../agent/researchAgent.js').then(m => m.enhanceImage(url));
 
-    if (!colorizedFile) {
-      return res.status(500).json({ error: "Colorization failed" });
+    if (!enhancedFilename) {
+      return res.status(500).json({ error: "Enhancement failed" });
     }
 
-    res.json({ success: true, colorUrl: `/color/${colorizedFile}` });
+    if (!R2_BUCKETS.IMAGE) {
+        console.warn("⚠️ R2 Image Bucket not configured. Serving local cache.");
+        return res.json({ success: true, colorizedUrl: `/color/${enhancedFilename}` }); // /color/ is mapped to tmp/color_cache? Need to check index.js but assuming yes or equivalent
+    }
+
+    // Upload to R2
+    let finalImageUrl = `/color/${enhancedFilename}`;
+    try {
+        const filePath = path.join(process.cwd(), "tmp", "color_cache", enhancedFilename);
+        const fileBuffer = fs.readFileSync(filePath);
+
+        const key = `enhanced-${Date.now()}-${enhancedFilename}`;
+        const command = new PutObjectCommand({
+            Bucket: R2_BUCKETS.IMAGE,
+            Key: key,
+            Body: fileBuffer,
+            ContentType: 'image/png' // Gemini output is usually PNG/JPEG
+        });
+
+        await r2Client.send(command);
+        finalImageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
+        console.log(`Enhanced image uploaded to R2: ${finalImageUrl}`);
+
+        // Clean up local temp file
+        try {
+            fs.unlinkSync(filePath);
+            console.log(`Cleaned up local image file: ${filePath}`);
+        } catch (cleanupErr) {
+            console.warn("Failed to cleanup temp image:", cleanupErr);
+        }
+
+    } catch (r2Error) {
+        console.error("R2 Upload failed for enhanced image:", r2Error);
+    }
+
+    res.json({ success: true, colorizedUrl: finalImageUrl });
   } catch (error) {
-    console.error("Colorize API Error:", error);
+    console.error("Enhance API Error:", error);
     res.status(500).json({ error: error.message });
   }
 });

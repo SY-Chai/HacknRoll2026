@@ -6,7 +6,9 @@ import { supabase } from '../config/supabase.js';
 import { r2Client, R2_BUCKETS, R2_DOMAINS } from '../config/r2.js';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { searchPhotographs } from '../scraper/nasScraper.js';
-import { enhanceDescription } from '../agent/researchAgent.js';
+import { enhanceDescription, generateAudio } from '../agent/researchAgent.js';
+import fs from 'fs';
+import path from 'path';
 import axios from 'axios';
 
 const router = express.Router();
@@ -125,7 +127,7 @@ router.post('/search', async (req, res) => {
 // --- 2. UPLOAD -> DB ---
 router.post('/create', upload.any(), async (req, res) => {
     try {
-        const { items } = req.body; // Expect JSON string of metadata
+        const { items, journalTitle } = req.body; // Expect JSON string of metadata
         const files = req.files;
 
         if (!items || !files) {
@@ -137,7 +139,10 @@ router.post('/create', upload.any(), async (req, res) => {
         // Create Journal Entry
         const { data: journal, error: journalError } = await supabase
             .from('Journal')
-            .insert({ user_created: true }) // No query for uploads
+            .insert({ 
+                user_created: true,
+                query: journalTitle || "Untitled Journal" 
+            }) 
             .select()
             .single();
 
@@ -185,6 +190,114 @@ router.post('/create', upload.any(), async (req, res) => {
 
     } catch (error) {
         console.error("Create failed:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// --- 4. BATCH FETCH ---
+router.post('/batch', async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!ids || !Array.isArray(ids)) {
+            return res.status(400).json({ error: "Missing or invalid IDs array" });
+        }
+
+        if (ids.length === 0) {
+            return res.json({ success: true, data: [] });
+        }
+
+        // Fetch Journals
+        const { data: journals, error } = await supabase
+            .from('Journal')
+            .select('*')
+            .in('id', ids)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.json({ success: true, data: journals });
+
+    } catch (error) {
+        console.error("Batch fetch failed:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- 5. CREATE MEMORY (Single) ---
+router.post('/create-memory', upload.fields([{ name: 'image', maxCount: 1 }, { name: 'audio', maxCount: 1 }]), async (req, res) => {
+    try {
+        const { title, description } = req.body;
+        const files = req.files;
+
+        // Create Journal Entry
+        const { data: journal, error: journalError } = await supabase
+            .from('Journal')
+            .insert({ user_created: true, query: title || 'Untitled Memory' })
+            .select()
+            .single();
+
+        if (journalError) throw journalError;
+
+        let imageUrl = null;
+        let audioUrl = null;
+
+        if (files.image) {
+            const file = files.image[0];
+            const key = await uploadToR2(file, R2_BUCKETS.IMAGE);
+            imageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
+        }
+
+        if (files.audio) {
+            const file = files.audio[0];
+            const key = await uploadToR2(file, R2_BUCKETS.AUDIO);
+            audioUrl = `${R2_DOMAINS.AUDIO}/${key}`;
+        } else if (description) {
+            // Auto-generate audio if description exists and no audio file provided
+            try {
+                console.log(`[Create Memory] Auto-generating audio for: ${title}`);
+                const audioFilename = await generateAudio(description, journal.id);
+                
+                if (audioFilename) {
+                    const filePath = path.join(process.cwd(), 'tmp', audioFilename);
+                    if (fs.existsSync(filePath)) {
+                        const buffer = fs.readFileSync(filePath);
+                        const file = {
+                            buffer: buffer,
+                            originalname: audioFilename,
+                            mimetype: 'audio/mpeg'
+                        };
+                        const key = await uploadToR2(file, R2_BUCKETS.AUDIO);
+                        audioUrl = `${R2_DOMAINS.AUDIO}/${key}`;
+                        console.log(`[Create Memory] Auto-generated audio uploaded: ${audioUrl}`);
+                        
+                        // Cleanup
+                        try { fs.unlinkSync(filePath); } catch (e) { console.warn("Failed to cleanup temp auto-audio:", e); }
+                    }
+                }
+            } catch (audioErr) {
+                console.error("[Create Memory] Auto-audio generation failed:", audioErr);
+                // Non-blocking, continue without audio
+            }
+        }
+
+        // Insert Record
+        const { error: recordError } = await supabase
+            .from('Record')
+            .insert({
+                journal_id: journal.id,
+                title: title || 'Untitled Memory',
+                description: description,
+                image_url: imageUrl,
+                audio_url: audioUrl
+            });
+
+        if (recordError) throw recordError;
+
+        res.json({ success: true, journalId: journal.id });
+
+    } catch (error) {
+        console.error("Create Memory failed:", error);
         res.status(500).json({ error: error.message });
     }
 });

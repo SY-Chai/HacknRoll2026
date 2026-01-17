@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import SceneViewer from '../components/SceneViewer';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette, Split, ArrowLeft, Wand2, Box } from 'lucide-react';
-import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slider';
+import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette, Split, ArrowLeft, Wand2, Box, Bookmark, Share2 } from 'lucide-react';
+
 
 export default function Journey() {
   const { id } = useParams();
@@ -28,7 +28,7 @@ export default function Journey() {
           title: record.title,
           text: record.description || "No description available.",
           visualFocus: 'default',
-          img_url: record.image_url ? `/api/proxy-image?url=${encodeURIComponent(record.image_url)}` : null,
+          img_url: record.image_url, // Direct R2 URL
           original_img_url: record.image_url,
           date: record.created_at ? new Date(record.created_at).toLocaleDateString() : "Unknown Date",
           audio_url: record.audio_url,
@@ -235,29 +235,7 @@ export default function Journey() {
 
   /* --- Audio Logic End --- */
 
-  if (isLoading) {
-    return (
-      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-        <Loader2 size={48} className="spinner" />
-        <p style={{ marginTop: '16px' }}>Restoring Memory...</p>
-      </div>
-    );
-  }
 
-  if (error || chapters.length === 0) {
-    return (
-      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-        <p>{error || "No journey data found."}</p>
-        <button
-          onClick={() => navigate('/')}
-          className="glass-panel"
-          style={{ marginTop: '20px', padding: '12px 24px', cursor: 'pointer', color: 'white' }}
-        >
-          Return to Home
-        </button>
-      </div>
-    );
-  }
 
   const nextChapter = () => {
     if (currentChapterIndex < chapters.length - 1) {
@@ -382,7 +360,33 @@ export default function Journey() {
 
   /* --- Audio Logic End --- */
 
+  if (isLoading) {
+    return (
+      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+        <Loader2 size={48} className="spinner" />
+        <p style={{ marginTop: '16px' }}>Restoring Memory...</p>
+      </div>
+    );
+  }
 
+  if (error || chapters.length === 0) {
+    return (
+      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+        <p>{error || "No journey data found."}</p>
+        <button
+          onClick={() => navigate('/')}
+          className="glass-panel"
+          style={{ marginTop: '20px', padding: '12px 24px', cursor: 'pointer', color: 'white' }}
+        >
+          Return to Home
+        </button>
+      </div>
+    );
+  }
+
+  // Ensure currentChapter is defined before rendering main content
+  // This is technically redundant due to the checks above, but safe.
+  if (!currentChapter) return null;
 
   return (
     <div
@@ -458,6 +462,69 @@ export default function Journey() {
             alignItems: "center",
           }}
         >
+
+          {/* Colorize Toggle */}
+          {currentChapter.original_img_url && (
+            <button
+              onClick={toggleColorMode}
+              className="glass-panel"
+              style={{
+                padding: "12px",
+                background: currentChapter.isColorMode
+                  ? "rgba(255, 77, 77, 0.2)"
+                  : "rgba(255, 255, 255, 0.1)",
+                border: currentChapter.isColorMode
+                  ? "1px solid rgba(255, 77, 77, 0.5)"
+                  : "1px solid rgba(255, 255, 255, 0.1)",
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                transition: "all 0.3s ease",
+              }}
+              title={currentChapter.isColorMode ? "Show Original" : "Colorize"}
+            >
+              {currentChapter.isColorizing ? (
+                <Loader2 size={20} className="spinner" />
+              ) : (
+                <Palette size={20} />
+              )}
+            </button>
+          )}
+
+          {/* Share Button */}
+          <button
+            onClick={handleShare}
+            className="glass-panel"
+            style={{
+              padding: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+            }}
+            title="Share Journey"
+          >
+            <Share2 size={20} />
+          </button>
+
+          {/* Save Button */}
+          <button
+            onClick={handleSave}
+            className="glass-panel"
+            style={{
+              padding: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: isSaved ? "#ffaa00" : "white",
+              borderColor: isSaved ? "rgba(255, 170, 0, 0.5)" : "rgba(255, 255, 255, 0.1)",
+            }}
+            title={isSaved ? "Remove from Saved" : "Save Journey"}
+          >
+            <Bookmark size={20} fill={isSaved ? "currentColor" : "none"} />
+          </button>
+
           {/* 3D-fy Button */}
           <button
             onClick={handleGenerate3D}
@@ -630,28 +697,20 @@ export default function Journey() {
         >
           {currentChapter.img_url ? (
             <>
-              {currentChapter.isColorMode && currentChapter.colorized_url ? (
-                <ReactCompareSlider
-                  itemOne={<ReactCompareSliderImage src={currentChapter.img_url} alt="Original" style={{ objectFit: "contain", background: "#000" }} />}
-                  itemTwo={<ReactCompareSliderImage src={currentChapter.colorized_url} alt="Colorized" style={{ objectFit: "contain", background: "#000" }} />}
-                  style={{ width: "100%", height: "100%", background: "#000" }}
-                />
-              ) : (
-                <img
-                  src={currentChapter.img_url}
-                  alt={currentChapter.title}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "contain",
-                    background: "#000",
-                    transition: "opacity 0.4s ease",
-                  }}
-                />
-              )}
+              <img
+                src={currentChapter.isColorMode && currentChapter.colorized_url ? currentChapter.colorized_url : currentChapter.img_url}
+                alt={currentChapter.title}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  background: "#000",
+                  transition: "opacity 0.4s ease",
+                }}
+              />
 
               {isColorizing && (
                 <div
@@ -773,6 +832,7 @@ export default function Journey() {
       {/* Footer: Description & Date */}
       <div
         style={{
+          position: "relative",
           padding: "0 48px 20px",
           zIndex: 10,
           textAlign: "center",
@@ -905,6 +965,6 @@ export default function Journey() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </div >
   );
 }

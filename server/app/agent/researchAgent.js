@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Resolve to root .env (agent is in server/app/agent/researchAgent.js)
-const envPath = path.resolve(__dirname, '../../../.env');
+const envPath = path.resolve(__dirname, '../../.env');
 dotenv.config({ path: envPath });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -226,35 +226,41 @@ export async function generateAudio(text, itemId) {
 }
 
 // Colorize Image using Gemini Nano Banana (Flash Image)
-export async function colorizeImage(imageUrl) {
-  const colorModel = "gemini-2.5-flash-image"; // Official Nano Banana model
+// Enhance Image using Gemini Nano Banana (Flash Image)
+// Logic: Always enhance/upscale. If BW, colorize.
+export async function enhanceImage(imageUrl) {
+  const colorModel = "gemini-2.5-flash-image"; 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${colorModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
   const imageHash = crypto.createHash("md5").update(imageUrl).digest("hex");
-  const filename = `color_cache_${imageHash}.png`;
+  const filename = `enhanced_cache_${imageHash}.png`;
   const tmpDir = path.join(process.cwd(), "tmp", "color_cache");
   const filePath = path.join(tmpDir, filename);
 
+  // Check cache (filename only, route handles R2 check if needed, but for now we regenerate local cache if missing)
   if (fs.existsSync(filePath)) {
-    console.log(`Using cached colorized image: ${filename}`);
+    console.log(`Using cached enhanced image: ${filename}`);
     return filename;
   }
 
   try {
-    console.log(`Downloading image for colorization: ${imageUrl}`);
+    console.log(`Downloading image for enhancement: ${imageUrl}`);
     const imgResponse = await axios.get(imageUrl, {
       responseType: "arraybuffer",
+      headers: {
+        "User-Agent": "Mozilla/5.0" // Avoid 403s from some sources
+      }
     });
     const base64Image = Buffer.from(imgResponse.data).toString("base64");
 
-    console.log(`Colorizing image via Nano Banana (${colorModel})...`);
+    console.log(`Enhancing image via Nano Banana (${colorModel})...`);
+    const prompt = "Analyze this image. If it is black and white, colorize it realistically. If it is already in color, enhance the lighting, details, and resolution to 1080p quality. Output ONLY the improved image.";
+
     const payload = {
       contents: [
         {
           parts: [
-            {
-              text: "Restore and colorize this black and white photo. Upscale the image to 1080p and 4K resolution using professional restoration techniques. Make the colors realistic and vibrant. Output ONLY the colorized image.",
-            },
+            { text: prompt },
             { inlineData: { mimeType: "image/jpeg", data: base64Image } },
           ],
         },
@@ -265,14 +271,13 @@ export async function colorizeImage(imageUrl) {
       },
     };
 
-    const response = await axios.post(url, payload, { timeout: 60000 });
+    const response = await axios.post(url, payload, { timeout: 90000 }); // Increased timeout for HD gen
 
     if (
       response.data.candidates &&
       response.data.candidates[0].content.parts[0].inlineData
     ) {
-      const inlineData =
-        response.data.candidates[0].content.parts[0].inlineData;
+      const inlineData = response.data.candidates[0].content.parts[0].inlineData;
       const colorImageData = inlineData.data;
       const buffer = Buffer.from(colorImageData, "base64");
 
@@ -281,13 +286,14 @@ export async function colorizeImage(imageUrl) {
       }
 
       fs.writeFileSync(filePath, buffer);
-      console.log(`Colorized image saved to cache: ${filePath}`);
+      console.log(`Enhanced image saved to cache: ${filePath}`);
       return filename;
     } else {
       throw new Error("No image data in response");
     }
   } catch (error) {
-    console.error("Colorization failed:", error.message);
+    console.error("Enhancement failed:", error.message);
+    if (error.response) console.error("Gemini Error:", error.response.data);
     return null;
   }
 }

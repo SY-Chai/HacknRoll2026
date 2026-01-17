@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, MapPin, ArrowRight, Clock, History, Sparkles } from 'lucide-react';
+import { Search, MapPin, ArrowRight, Clock, History, Sparkles, Plus, Bookmark } from 'lucide-react';
 import SceneViewer from '../components/SceneViewer';
-
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 
+
 export default function Home() {
     const [searchTerm, setSearchTerm] = useState('');
-    const [dateRange, setDateRange] = useState([1900, 2026]);
+
     const [recentSearches, setRecentSearches] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -224,28 +224,7 @@ export default function Home() {
                         </button>
                     </div>
 
-                    {/* Year Range Slider */}
-                    <div style={{ w: '90%', width: '90%', padding: '0 10px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', marginBottom: '8px' }}>
-                            <span>{dateRange[0]}</span>
-                            <span>Year Range</span>
-                            <span>{dateRange[1]}</span>
-                        </div>
-                        <Slider
-                            range
-                            min={1800}
-                            max={2026}
-                            defaultValue={[1900, 2026]}
-                            value={dateRange}
-                            onChange={(val) => setDateRange(val)}
-                            trackStyle={[{ backgroundColor: 'var(--text-main)', height: 4 }]}
-                            handleStyle={[
-                                { borderColor: 'var(--text-main)', backgroundColor: 'var(--text-main)', opacity: 1 },
-                                { borderColor: 'var(--text-main)', backgroundColor: 'var(--text-main)', opacity: 1 }
-                            ]}
-                            railStyle={{ backgroundColor: 'rgba(255,255,255,0.2)', height: 4 }}
-                        />
-                    </div>
+
                 </motion.form>
 
                 {/* Action Buttons */}
@@ -280,12 +259,12 @@ export default function Home() {
                             e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
                         }}
                     >
-                        <History size={18} />
-                        My Memories
+                        <Plus size={18} />
+                        Create Journal
                     </button>
 
                     <button
-                        onClick={() => navigate('/splat')}
+                        onClick={() => navigate('/saved')}
                         style={{
                             background: 'rgba(255, 255, 255, 0.05)',
                             color: 'white',
@@ -309,8 +288,8 @@ export default function Home() {
                             e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
                         }}
                     >
-                        <Sparkles size={18} />
-                        View Splat
+                        <Bookmark size={18} />
+                        Saved Journals
                     </button>
                 </motion.div>
 
