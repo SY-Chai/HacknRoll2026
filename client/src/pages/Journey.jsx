@@ -76,6 +76,7 @@ export default function Journey() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isAudioProcessing, setIsAudioProcessing] = useState(false);
   const [isColorizing, setIsColorizing] = useState(false);
+  const [isGenerating3D, setIsGenerating3D] = useState(false);
 
   // UI State
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -532,42 +533,28 @@ export default function Journey() {
         >
           {currentChapter.img_url ? (
             <>
-              <img
-                src={currentChapter.img_url}
-                alt={currentChapter.title}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  background: "#000",
-                  transition: "opacity 0.4s ease",
-                }}
-              />
-
-              <AnimatePresence>
-                {currentChapter.isColorMode && currentChapter.colorized_url && (
-                  <motion.img
-                    key="colorized"
-                    src={currentChapter.colorized_url}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.4 }}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      background: "#000",
-                    }}
-                  />
-                )}
-              </AnimatePresence>
+              {currentChapter.isColorMode && currentChapter.colorized_url ? (
+                <ReactCompareSlider
+                  itemOne={<ReactCompareSliderImage src={currentChapter.img_url} alt="Original" style={{ objectFit: "contain", background: "#000" }} />}
+                  itemTwo={<ReactCompareSliderImage src={currentChapter.colorized_url} alt="Colorized" style={{ objectFit: "contain", background: "#000" }} />}
+                  style={{ width: "100%", height: "100%", background: "#000" }}
+                />
+              ) : (
+                <img
+                  src={currentChapter.img_url}
+                  alt={currentChapter.title}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    background: "#000",
+                    transition: "opacity 0.4s ease",
+                  }}
+                />
+              )}
 
               {isColorizing && (
                 <div

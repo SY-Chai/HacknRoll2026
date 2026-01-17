@@ -4,10 +4,17 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Lazy load .env
-dotenv.config(); 
+dotenv.config();
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const accountId = process.env.R2_ACCOUNT_ID;
+
+console.log("--- R2 CONFIG DEBUG ---");
+console.log("R2_PUBLIC_IMAGE_URL:", process.env.R2_PUBLIC_IMAGE_URL);
+console.log("CLOUDFLARE_R2_IMAGE_URL:", process.env.CLOUDFLARE_R2_IMAGE_URL);
+console.log("R2_IMAGE_DOMAIN:", process.env.R2_IMAGE_DOMAIN);
+console.log("R2_IMAGE_BUCKET:", process.env.R2_IMAGE_BUCKET);
+console.log("-----------------------");
 
 // Parse Cloudflare S3 Key if present
 let accessKeyId = process.env.R2_ACCESS_KEY_ID;

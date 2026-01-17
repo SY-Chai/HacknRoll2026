@@ -2,6 +2,24 @@ import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { SplatMesh, SparkControls } from "@sparkjsdev/spark";
 
+const ControlRow = ({ label, value, min, max, step, onChange }) => (
+    <div style={{ marginBottom: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', color: '#ccc', fontSize: '12px' }}>
+            <span>{label}</span>
+            <span>{value.toFixed(2)}</span>
+        </div>
+        <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={(e) => onChange(parseFloat(e.target.value))}
+            style={{ width: '100%', cursor: 'pointer' }}
+        />
+    </div>
+);
+
 export default function SplatViewer({ url }) {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);

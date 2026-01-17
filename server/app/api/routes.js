@@ -38,6 +38,10 @@ router.get("/proxy-image", async (req, res) => {
     res.set("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
     response.data.pipe(res);
   } catch (error) {
+    if (error.code === 'ENOTFOUND') {
+      console.error(`Proxy DNS Error: Could not resolve host for URL: ${req.query.url}`);
+      return res.status(400).send("Invalid image URL host");
+    }
     console.error("Proxy Image Error:", error.message);
     res.status(500).send("Failed to fetch image");
   }

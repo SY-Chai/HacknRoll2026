@@ -30,19 +30,27 @@ async function uploadToR2(file, bucket) {
 // --- 1. SEARCH -> DB ---
 router.post('/search', async (req, res) => {
     try {
-        const { query } = req.body;
+        const { query, startYear, endYear } = req.body;
         if (!query) return res.status(400).json({ error: "Missing query" });
 
-        console.log(`[Journal] Searching for: ${query}`);
+        console.log(`[Journal] Searching for: ${query} (${startYear || 'Any'} - ${endYear || 'Any'})`);
 
         // 1. Check for existing Journal
-        const { data: existingJournals, error: findError } = await supabase
-            .from('Journal')
-            .select('id')
-            .eq('query', query)
-            .limit(1);
+        // NOTE: If we want to cache by query AND date, we'd need to update the schema or query logic.
+        // For now, let's assume specific date searches are unique enough to warrant a new scrape if the exact query+params don't match.
+        // Actually, the simple 'eq("query", query)' might return a journal that was scraped WITHOUT date filters.
+        // To be safe/simple for HacknRoll, we'll SKIP cache if date filters are present, OR just scrape fresh.
+        // Let's scrape fresh if dates are provided to ensure accuracy.
 
-        if (findError) throw findError;
+        let existingJournals = [];
+        if (!startYear && !endYear) {
+            const { data, error: findError } = await supabase
+                .from('Journal')
+                .select('id')
+                .eq('query', query)
+                .limit(1);
+            if (!findError) existingJournals = data;
+        }
 
         if (existingJournals && existingJournals.length > 0) {
             console.log(`[Journal] Found existing journal: ${existingJournals[0].id}`);
@@ -179,7 +187,7 @@ router.post('/create', upload.any(), async (req, res) => {
 
         for (let i = 0; i < parsedItems.length; i++) {
             const itemMetadata = parsedItems[i];
-            
+
             // Find Image
             const imageFile = files.find(f => f.fieldname === `image_${i}`);
             let imageUrl = null;
@@ -316,6 +324,9 @@ router.get('/mine', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
+
+        // Check if id is valid string/number just to be safe, but allow UUIDs
+        if (!id) return res.status(400).json({ error: "Missing ID" });
 
         // Fetch Journal
         const { data: journal, error: journalError } = await supabase
