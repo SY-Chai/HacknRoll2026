@@ -149,7 +149,7 @@ router.post('/search', async (req, res) => {
 // --- 2. UPLOAD -> DB ---
 router.post('/create', upload.any(), async (req, res) => {
     try {
-        const { items } = req.body; // Expect JSON string of metadata
+        const { items, journalTitle } = req.body; // Expect JSON string of metadata
         const files = req.files;
 
         if (!items || !files) {
@@ -161,7 +161,10 @@ router.post('/create', upload.any(), async (req, res) => {
         // Create Journal Entry
         const { data: journal, error: journalError } = await supabase
             .from('Journal')
-            .insert({ user_created: true }) // No query for uploads
+            .insert({ 
+                user_created: true,
+                query: journalTitle || 'Untitled Journal' // Save Title in Query Column
+            }) 
             .select()
             .single();
 
@@ -207,12 +210,37 @@ router.post('/create', upload.any(), async (req, res) => {
                 imageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
             }
 
-            // Find Audio
-            const audioFile = files.find(f => f.fieldname === `audio_${i}`);
+            // Auto-Generate Audio from Description
             let audioUrl = null;
-            if (audioFile) {
-                const key = await uploadToR2(audioFile, R2_BUCKETS.AUDIO);
-                audioUrl = `${R2_DOMAINS.AUDIO}/${key}`;
+            if (itemMetadata.description) {
+                try {
+                    const safeId = `user_gen_${Date.now()}_${i}`;
+                    const audioFilename = await generateAudio(itemMetadata.description, safeId);
+                    
+                    if (audioFilename && R2_BUCKETS.AUDIO) {
+                        const filePath = path.join(process.cwd(), 'tmp', audioFilename);
+                        if (fs.existsSync(filePath)) {
+                            const fileBuffer = fs.readFileSync(filePath);
+                            const key = `audio-${safeId}-${Date.now()}.mp3`;
+                             
+                            const command = new PutObjectCommand({
+                                Bucket: R2_BUCKETS.AUDIO,
+                                Key: key,
+                                Body: fileBuffer,
+                                ContentType: 'audio/mpeg'
+                            });
+                            
+                            await r2Client.send(command);
+                            audioUrl = `${R2_DOMAINS.AUDIO}/${key}`;
+                            console.log(`[Create] Generated & Uploaded Audio: ${audioUrl}`);
+                            
+                            // Cleanup tmp file
+                            fs.unlinkSync(filePath);
+                        }
+                    }
+                } catch (audioErr) {
+                    console.warn(`Audio generation failed for item ${i}:`, audioErr.message);
+                }
             }
 
             records.push({
@@ -220,7 +248,7 @@ router.post('/create', upload.any(), async (req, res) => {
                 title: itemMetadata.title,
                 description: itemMetadata.description,
                 image_url: imageUrl,
-                audio_url: null,
+                audio_url: audioUrl,
                 splat_url: null
             });
         }
@@ -240,7 +268,50 @@ router.post('/create', upload.any(), async (req, res) => {
 });
 
 
-// --- 3. FETCH JOURNAL ---
+// --- 3. BATCH FETCH & USER JOURNALS ---
+
+// Get specific journals by IDs (For LocalStorage Bookmarks)
+router.post('/batch', async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.json({ success: true, data: [] });
+        }
+
+        const { data: journals, error } = await supabase
+            .from('Journal')
+            .select('*')
+            .in('id', ids)
+            .order('id', { ascending: false });
+
+        if (error) throw error;
+
+        res.json({ success: true, data: journals });
+    } catch (error) {
+        console.error("Batch fetch failed:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get User Created Journals
+router.get('/mine', async (req, res) => {
+    try {
+        const { data: journals, error } = await supabase
+            .from('Journal')
+            .select('*')
+            .eq('user_created', true)
+            .order('id', { ascending: false });
+
+        if (error) throw error;
+
+        res.json({ success: true, data: journals });
+    } catch (error) {
+        console.error("Fetch mine failed:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- 4. FETCH SINGLE JOURNAL ---
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;

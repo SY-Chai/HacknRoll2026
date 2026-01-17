@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import SceneViewer from '../components/SceneViewer';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette, Share2, Bookmark } from 'lucide-react';
 
 export default function Journey() {
   const { id } = useParams();
@@ -79,6 +79,31 @@ export default function Journey() {
 
   // UI State
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  // Check if saved on load
+  useEffect(() => {
+    if (!id) return;
+    const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+    setIsSaved(savedIds.includes(id));
+  }, [id]);
+
+  const handleSave = () => {
+    const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+    let newIds;
+    if (isSaved) {
+      newIds = savedIds.filter(sid => sid !== id);
+    } else {
+      newIds = [...savedIds, id];
+    }
+    localStorage.setItem('savedJournalIds', JSON.stringify(newIds));
+    setIsSaved(!isSaved);
+  };
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    alert("Journey link copied to clipboard!");
+  };
 
   const audioRef = useRef(null);
   const currentChapter = chapters[currentChapterIndex];
@@ -293,6 +318,24 @@ export default function Journey() {
           position: "relative",
         }}
       >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+          <button onClick={() => navigate('/')} className="glass-panel" style={{ padding: '12px', color: 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <HomeIcon size={20} /> <span className="mobile-hide">Home</span>
+          </button>
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {/* Share Button */}
+            <button onClick={handleShare} className="glass-panel" style={{ padding: '12px', color: 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Share2 size={20} /> <span className="mobile-hide">Share</span>
+            </button>
+
+            {/* Save Button (Only if NOT user created, or always? User requested save for searched journals. Let's allowing saving everything for simplicity, acting as a bookmark) */}
+            <button onClick={handleSave} className="glass-panel" style={{ padding: '12px', color: isSaved ? '#00c8ff' : 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Bookmark size={20} fill={isSaved ? "#00c8ff" : "none"} /> <span className="mobile-hide">{isSaved ? 'Saved' : 'Save'}</span>
+            </button>
+          </div>
+        </div>
         <div style={{ flex: 1, display: "flex", justifyContent: "flex-start" }}>
           <button
             onClick={() => navigate("/")}
