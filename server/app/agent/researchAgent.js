@@ -5,16 +5,16 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
 // Exa Search API
 async function searchExa(query) {
   try {
     console.log(`Searching Exa for: ${query}`);
-    const response = await axios.post('https://api.exa.ai/search', 
+    const response = await axios.post('https://api.exa.ai/search',
       {
         query: query,
         numResults: 3,
@@ -30,7 +30,7 @@ async function searchExa(query) {
         }
       }
     );
-    
+
     // Check if results exist
     const results = response.data.results || [];
     const snippets = results.map(r => `Title: ${r.title}\nText: ${r.text.substring(0, 300)}...`);
@@ -41,7 +41,7 @@ async function searchExa(query) {
   } catch (error) {
     console.error('Exa Search failed:', error.message);
     if (error.response) {
-       console.error('Exa API Error Data:', error.response.data);
+      console.error('Exa API Error Data:', error.response.data);
     }
     return "";
   }
@@ -53,18 +53,18 @@ export async function enhanceDescription(title, date) {
   try {
     // 1. Search for context with retries
     let searchContext = "";
-    
+
     // Attempt 1: Specific query
     let searchQuery = `${title} ${date} singapore history`;
     searchContext = await searchExa(searchQuery);
-    
+
     // Attempt 2: Broader query if first failed
     if (!searchContext) {
       console.log("Attempt 1 failed, trying broader query...");
       searchQuery = `${title} singapore`;
       searchContext = await searchExa(searchQuery);
     }
-    
+
     if (!searchContext) {
       return "Historical context could not be retrieved from search.";
     }
@@ -90,16 +90,16 @@ export async function enhanceDescription(title, date) {
   } catch (error) {
     console.error('Gemini enhancement CRITICAL failure:', error);
     if (error.response) {
-       console.error('Gemini Response Error:', error.response);
+      console.error('Gemini Response Error:', error.response);
     }
-    return `Photo of ${title}, taken in ${date}. (AI description unavailable: ${error.message})`;
+    return null;
   }
 }
 
 // Helper to create WAV header for raw PCM
 function createWavHeader(dataLength, sampleRate = 24000, numChannels = 1, bitsPerSample = 16) {
   const header = Buffer.alloc(44);
-  
+
   // RIFF identifier
   header.write('RIFF', 0);
   // File size usually dataLength + 36
@@ -126,7 +126,7 @@ function createWavHeader(dataLength, sampleRate = 24000, numChannels = 1, bitsPe
   header.write('data', 36);
   // Data chunk length
   header.writeUInt32LE(dataLength, 40);
-  
+
   return header;
 }
 
@@ -134,7 +134,7 @@ function createWavHeader(dataLength, sampleRate = 24000, numChannels = 1, bitsPe
 export async function generateAudio(text, itemId) {
   const ttsModel = "gemini-2.5-flash-preview-tts";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-  
+
   const payload = {
     contents: [{
       parts: [{ text: text }]
@@ -154,30 +154,34 @@ export async function generateAudio(text, itemId) {
   try {
     console.log("Generating audio (Fenrir)...");
     const response = await axios.post(url, payload);
-    
+
     if (response.data.candidates && response.data.candidates[0].content.parts[0].inlineData) {
       const inlineData = response.data.candidates[0].content.parts[0].inlineData;
       const audioData = inlineData.data;
       const rawBuffer = Buffer.from(audioData, 'base64');
-      
+
       // Determine sample rate from mimeType if possible, otherwise default 24000
       // Expected: audio/L16;codec=pcm;rate=24000
       let sampleRate = 24000;
       if (inlineData.mimeType && inlineData.mimeType.includes('rate=')) {
-         try {
-           const match = inlineData.mimeType.match(/rate=(\d+)/);
-           if (match && match[1]) sampleRate = parseInt(match[1]);
-         } catch (e) {
-           console.log("Could not parse rate, default to 24000");
-         }
+        try {
+          const match = inlineData.mimeType.match(/rate=(\d+)/);
+          if (match && match[1]) sampleRate = parseInt(match[1]);
+        } catch (e) {
+          console.log("Could not parse rate, default to 24000");
+        }
       }
 
       const wavHeader = createWavHeader(rawBuffer.length, sampleRate);
       const finalBuffer = Buffer.concat([wavHeader, rawBuffer]);
-      
+
       const filename = `audio_${itemId}_${Date.now()}.wav`; // Correct extension .wav
-      const filePath = path.join(process.cwd(), 'tmp', filename);
-      
+      const tmpDir = path.join(process.cwd(), 'tmp');
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir);
+      }
+      const filePath = path.join(tmpDir, filename);
+
       fs.writeFileSync(filePath, finalBuffer);
       console.log(`Audio saved to: ${filePath}`);
       return filename;

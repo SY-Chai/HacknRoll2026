@@ -3,170 +3,144 @@ import * as cheerio from 'cheerio';
 
 const BASE_URL = 'https://www.nas.gov.sg/archivesonline/photographs/search-result';
 
-export async function searchPhotographs(keywords, startDate, endDate, limit = 100) {
+// Updated default limit to 8 as requested
+export async function searchPhotographs(keywords, startDate, endDate, limit = 10) {
   try {
+    // 1. Configure Search Parameters
+    // We request MORE than the limit (e.g., 20) to create a buffer.
+    // This allows us to skip duplicates and still reach the target of 8 unique items.
     const params = {
       'search-type': 'advanced',
       'keywords': keywords,
       'keywords-type': 'all',
-      'max-display': '20' // Fetch minimum allowed by server to reduce load, we will slice later
+      'max-display': '30'
     };
 
-    if (startDate) {
-      params['date-from'] = startDate;
-    }
-    if (endDate) {
-      params['date-to'] = endDate;
-    }
+    if (startDate) params['date-from'] = startDate;
+    if (endDate) params['date-to'] = endDate;
 
-    console.log('Fetching URL with params:', params);
+    console.log('Fetching Search Results with params:', params);
 
+    // 2. Fetch Search Results Page
     const response = await axios.get(BASE_URL, { params });
-    const html = response.data;
-    const $ = cheerio.load(html);
-    const results = [];
+    const $ = cheerio.load(response.data);
 
-    // The selector investigation showed results are likely in .searchResultItem or similar
-    // Based on browser investigation:
-    // Container: likely .searchResultItem or derived from 'div' structure.
-    // Let's rely on the structure seen: 
-    //   item: div.searchResultItem (or similar, need to be robust)
-    //   title: .resultData a.linkRow
-    //   image: .imageColumn img
-    //   date: .resultData p.date
-    //   source: .resultData p.source
+    let candidates = [];
 
-    // Let's iterate over the containers.
-    // From manual investigation output:
-    // "Result Item Container": ".searchResultItem"
-    
+    // 3. Extract Candidates (Links & Images)
     $('.searchResultItem').each((i, el) => {
-      const titleElement = $(el).find('.resultData a.linkRow');
+      const linkElement = $(el).find('.resultData a.linkRow');
       const imageElement = $(el).find('.imageColumn img');
-      const dateElement = $(el).find('.resultData .date'); // Assuming class .date based on typical structure, or p contains text
-      
-      const title = titleElement.text().trim();
-      const link = titleElement.attr('href');
+      const dateElement = $(el).find('.resultData .date');
+
+      let link = linkElement.attr('href');
+
+      // Initial fallback title
+      let tempTitle = $(el).find('.details').eq(1).text().trim();
+      if (!tempTitle) tempTitle = linkElement.text().trim();
+
       const imageSrc = imageElement.attr('src');
-      
-      // Sometimes date is just text in a p tag, let's try to find it more loosely if specific class fails
+
+      // Date logic
       let date = dateElement.text().trim();
       if (!date) {
-         // Fallback: look for text pattern in .resultData
-         const textContent = $(el).find('.resultData').text();
-         const dateMatch = textContent.match(/(\d{2}\/\d{2}\/\d{4})/);
-         if (dateMatch) date = dateMatch[1];
+        const textContent = $(el).find('.resultData').text();
+        const dateMatch = textContent.match(/(\d{2}\/\d{2}\/\d{4})/);
+        if (dateMatch) date = dateMatch[1];
       }
 
-      // Process the URL
+      // Normalize URL
       let fullLink = link;
       if (link) {
-        if (link.startsWith('http')) {
-           fullLink = link;
-        } else if (link.startsWith('//')) {
-           fullLink = `https:${link}`;
-        } else if (link.startsWith('/')) {
-           // It's a root relative path.
-           // Check if it already includes /archivesonline or not to decide base
-           fullLink = `https://www.nas.gov.sg${link}`;
-        } else {
-           // Relative to current path?
-           fullLink = `https://www.nas.gov.sg/archivesonline/${link}`;
-        }
+        if (link.startsWith('http')) fullLink = link;
+        else if (link.startsWith('//')) fullLink = `https:${link}`;
+        else if (link.startsWith('/')) fullLink = `https://www.nas.gov.sg${link}`;
+        else fullLink = `https://www.nas.gov.sg/archivesonline/${link}`;
       }
 
-      // Process the Image URL
+      // Normalize Image URL
       let fullImageSrc = imageSrc;
       if (imageSrc) {
-        if (imageSrc.startsWith('http')) {
-          fullImageSrc = imageSrc;
-        } else if (imageSrc.startsWith('//')) {
-          fullImageSrc = `https:${imageSrc}`;
-        } else if (imageSrc.startsWith('/')) {
-          fullImageSrc = `https://www.nas.gov.sg${imageSrc}`;
-        }
-        
-        // Remove 'a' from the end of the filename (e.g., img001a.jpg -> img001.jpg)
-        // This is often used to switch from a specific variant to the main image
+        if (imageSrc.startsWith('http')) fullImageSrc = imageSrc;
+        else if (imageSrc.startsWith('//')) fullImageSrc = `https:${imageSrc}`;
+        else if (imageSrc.startsWith('/')) fullImageSrc = `https://www.nas.gov.sg${imageSrc}`;
         fullImageSrc = fullImageSrc.replace(/a\.jpg$/i, '.jpg');
       }
 
-      if (title && fullImageSrc) {
-        results.push({
-          title,
+      if (fullLink && fullImageSrc) {
+        candidates.push({
+          tempTitle: tempTitle,
           url: fullLink,
           imageUrl: fullImageSrc,
           date
         });
       }
     });
-    
-    // Batched Processing to guarantee filling the limit without over-fetching
-    const uniqueResults = [];
+
+    console.log(`Found ${candidates.length} candidates. Processing until we have ${limit} unique items...`);
+
+    // 4. Process candidates until we fill the quota
+    const finalResults = [];
     const seenTitles = new Set();
-    let currentIndex = 0;
-    
-    // Process matches until we reach the limit or run out of candidates
-    while (uniqueResults.length < limit && currentIndex < results.length) {
-        // Prepare a batch (e.g., try to fetch enough to fill the remaining gap, plus a buffer)
-        // Buffer of 2 extra in case of duplicates in this batch
-        const remainingNeeded = limit - uniqueResults.length;
-        const batchSize = remainingNeeded + 2; 
-        
-        const batchCandidates = results.slice(currentIndex, currentIndex + batchSize);
-        currentIndex += batchSize; // Move pointer
 
-        if (batchCandidates.length === 0) break;
+    for (const item of candidates) {
+      // Stop if we have reached the requested limit (e.g. 8)
+      if (finalResults.length >= limit) break;
 
-        console.log(`Processing batch of ${batchCandidates.length} items (Needed: ${remainingNeeded})...`);
+      try {
+        // Fetch the details page
+        const detailResponse = await axios.get(item.url);
+        const $detail = cheerio.load(detailResponse.data);
 
-        // Fetch details for this batch in parallel
-        const batchDetails = await Promise.all(batchCandidates.map(async (item) => {
-            try {
-                const detailResponse = await axios.get(item.url);
-                const $d = cheerio.load(detailResponse.data);
-                
-                let newTitle = null;
-                const label = $d('label').filter((i, el) => $d(el).text().includes('Unedited Description Supplied by Transferring Agency'));
-                
-                if (label.length > 0) {
-                    const nextDiv = label.next('div');
-                    if (nextDiv.length > 0) newTitle = nextDiv.text().trim();
-                }
+        // Extract "Unedited Description"
+        // Logic: Find label text -> go up to row -> find sibling .details span
+        const uneditedDescLabel = $detail('label').filter((i, el) =>
+          $detail(el).text().trim().includes('Unedited Description Supplied by Transferring Agency')
+        );
 
-                if (!newTitle) {
-                    $d('td').each((i, el) => {
-                        if ($d(el).text().includes('Unedited Description Supplied by Transferring Agency')) {
-                            const nextTd = $d(el).next('td');
-                            if (nextTd.length > 0) newTitle = nextTd.text().trim();
-                        }
-                    });
-                }
+        let finalTitle = item.tempTitle;
 
-                return {
-                    ...item,
-                    title: newTitle || item.title,
-                    originalCaption: item.title
-                };
-            } catch (err) {
-                console.error(`Failed to fetch details for ${item.url}:`, err.message);
-                return item;
-            }
-        }));
-
-        // Add unique items from this batch to the final list
-        for (const item of batchDetails) {
-            if (uniqueResults.length >= limit) break; // Hard stop if filled during batch processing
-
-            const normalizedTitle = item.title.trim().toLowerCase();
-            if (!seenTitles.has(normalizedTitle)) {
-                seenTitles.add(normalizedTitle);
-                uniqueResults.push(item);
-            }
+        if (uneditedDescLabel.length > 0) {
+          const uneditedText = uneditedDescLabel.closest('.row').find('.details').text().trim();
+          if (uneditedText) {
+            finalTitle = uneditedText;
+          }
         }
+
+        // 5. Deduplication Check
+        // If we have already seen this title, SKIP it.
+        if (seenTitles.has(finalTitle)) {
+          console.log(`Skipping duplicate title: "${finalTitle}"`);
+          continue; // Move to the next candidate (finding a "new one")
+        }
+
+        // If unique, add to results
+        seenTitles.add(finalTitle);
+        finalResults.push({
+          title: finalTitle,
+          url: item.url,
+          imageUrl: item.imageUrl,
+          date: item.date
+        });
+
+      } catch (err) {
+        console.warn(`Failed to fetch details for ${item.url}: ${err.message}`);
+        // Depending on preference, you could skip this item or add it with the fallback title.
+        // Here we try to add it with the temp title if unique.
+        if (!seenTitles.has(item.tempTitle)) {
+          seenTitles.add(item.tempTitle);
+          finalResults.push({
+            title: item.tempTitle,
+            url: item.url,
+            imageUrl: item.imageUrl,
+            date: item.date
+          });
+        }
+      }
     }
 
-    return uniqueResults;
+    console.log(`Successfully scraped ${finalResults.length} unique items.`);
+    return finalResults;
 
   } catch (error) {
     console.error('Error in searchPhotographs:', error);
