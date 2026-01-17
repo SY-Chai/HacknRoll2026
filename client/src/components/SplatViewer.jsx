@@ -1,26 +1,6 @@
-import React, { useMemo, useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
-import { SplatMesh } from '@sparkjsdev/spark';
-
-function Splat({ url }) {
-    const splat = useMemo(() => {
-        return new SplatMesh({
-            url: url,
-        });
-    }, [url]);
-
-    useEffect(() => {
-        return () => {
-            // Cleanup if spark provides a dispose method on SplatMesh
-            if (splat.dispose) {
-                splat.dispose();
-            }
-        };
-    }, [splat]);
-
-    return <primitive object={splat} />;
-}
+import React, { useEffect, useRef } from "react";
+import * as THREE from "three";
+import { SplatMesh, SparkControls } from "@sparkjsdev/spark";
 
 const ControlRow = ({ label, value, min, max, step, onChange }) => (
     <div style={{ marginBottom: '8px' }}>
@@ -41,98 +21,120 @@ const ControlRow = ({ label, value, min, max, step, onChange }) => (
 );
 
 export default function SplatViewer({ url }) {
-    const [scale, setScale] = React.useState(2);
-    const [rotation, setRotation] = React.useState([Math.PI, 0, 0]); // Default flip X
-    const [position, setPosition] = React.useState([0, 0, 0]);
-    const [showControls, setShowControls] = React.useState(true);
+  const containerRef = useRef(null);
+  const rendererRef = useRef(null);
+  const sceneRef = useRef(null);
+  const cameraRef = useRef(null);
+  const controlsRef = useRef(null);
+  const splatMeshRef = useRef(null);
+  const animationIdRef = useRef(null);
 
-    if (!url) {
-        return (
-            <div style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                background: '#000',
-                color: '#fff'
-            }}>
-                No Splat URL provided
-            </div>
-        );
-    }
+  useEffect(() => {
+    if (!url || !containerRef.current) return;
 
-    return (
-        <div style={{ width: '100%', height: '100vh', background: '#111', position: 'relative' }}>
-            {/* Control Panel */}
-            <div style={{
-                position: 'absolute',
-                top: '20px',
-                right: '20px',
-                background: 'rgba(0, 0, 0, 0.7)',
-                backdropFilter: 'blur(10px)',
-                padding: '16px',
-                borderRadius: '12px',
-                color: 'white',
-                zIndex: 100,
-                width: '220px',
-                border: '1px solid rgba(255,255,255,0.1)',
-                display: showControls ? 'block' : 'none'
-            }}>
-                <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', borderBottom: '1px solid #444', paddingBottom: '8px' }}>Model Controls</h3>
+    const container = containerRef.current;
 
-                <ControlRow label="Scale" value={scale} min={0.1} max={10} step={0.1} onChange={setScale} />
+    // Initialize Three.js scene
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
 
-                <div style={{ marginTop: '12px', borderTop: '1px solid #333', paddingTop: '8px' }}>
-                    <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>ROTATION</div>
-                    <ControlRow label="X" value={rotation[0]} min={-Math.PI} max={Math.PI} step={0.1} onChange={v => setRotation([v, rotation[1], rotation[2]])} />
-                    <ControlRow label="Y" value={rotation[1]} min={-Math.PI} max={Math.PI} step={0.1} onChange={v => setRotation([rotation[0], v, rotation[2]])} />
-                    <ControlRow label="Z" value={rotation[2]} min={-Math.PI} max={Math.PI} step={0.1} onChange={v => setRotation([rotation[0], rotation[1], v])} />
-                </div>
-
-                <div style={{ marginTop: '12px', borderTop: '1px solid #333', paddingTop: '8px' }}>
-                    <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>POSITION</div>
-                    <ControlRow label="Y (Up/Down)" value={position[1]} min={-5} max={5} step={0.1} onChange={v => setPosition([position[0], v, position[2]])} />
-                </div>
-            </div>
-
-            <button
-                onClick={() => setShowControls(!showControls)}
-                style={{
-                    position: 'absolute',
-                    top: '20px',
-                    right: showControls ? '250px' : '20px',
-                    zIndex: 100,
-                    background: 'rgba(255,255,255,0.1)',
-                    border: 'none',
-                    color: 'white',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    transition: 'right 0.3s ease'
-                }}
-            >
-                {showControls ? 'Hide' : 'Controls'}
-            </button>
-
-            <Canvas>
-                <PerspectiveCamera makeDefault position={[0, 0, 3]} fov={50} />
-
-                <OrbitControls
-                    enableDamping={true}
-                    dampingFactor={0.05}
-                    rotateSpeed={0.5}
-                    zoomSpeed={0.8}
-                    minDistance={0.5}
-                    maxDistance={20}
-                />
-
-                <ambientLight intensity={1.0} />
-
-                <group scale={[scale, scale, scale]} rotation={rotation} position={position}>
-                    <Splat url={url} />
-                </group>
-            </Canvas>
-        </div>
+    // Initialize camera
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      container.clientWidth / container.clientHeight,
+      0.1,
+      1000,
     );
+    camera.position.set(0, 0, 5);
+    cameraRef.current = camera;
+
+    // Initialize WebGL renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setClearColor(0x000000);
+    container.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
+
+    // Initialize SparkJS controls
+    const controls = new SparkControls({ canvas: renderer.domElement });
+    controlsRef.current = controls;
+
+    // Create and add SplatMesh
+    const splatMesh = new SplatMesh({ url });
+    scene.add(splatMesh);
+    splatMeshRef.current = splatMesh;
+
+    // Handle window resize
+    const handleResize = () => {
+      if (!container || !renderer || !camera) return;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    };
+    window.addEventListener("resize", handleResize);
+
+    // Animation loop
+    let lastTime = performance.now();
+    const animate = (time) => {
+      animationIdRef.current = requestAnimationFrame(animate);
+
+      const deltaTime = (time - lastTime) / 1000;
+      lastTime = time;
+
+      controls.update(camera, deltaTime);
+      renderer.render(scene, camera);
+    };
+    animationIdRef.current = requestAnimationFrame(animate);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener("resize", handleResize);
+
+      if (animationIdRef.current) {
+        cancelAnimationFrame(animationIdRef.current);
+      }
+
+      if (splatMeshRef.current) {
+        scene.remove(splatMeshRef.current);
+        splatMeshRef.current.dispose?.();
+      }
+
+      if (controlsRef.current) {
+        controlsRef.current.dispose?.();
+      }
+
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        container.removeChild(rendererRef.current.domElement);
+      }
+    };
+  }, [url]);
+
+  if (!url) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          background: "#000",
+          color: "#fff",
+        }}
+      >
+        No Splat URL provided
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "100%", background: "#000" }}
+    />
+  );
 }

@@ -5,6 +5,8 @@ import Journey from './pages/Journey';
 import Memories from './pages/Memories';
 import SplatPage from './pages/SplatPage';
 
+import SavedJournals from './pages/SavedJournals';
+
 function App() {
   return (
     <Router>
@@ -12,6 +14,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/journey/:id" element={<Journey />} />
         <Route path="/memories" element={<Memories />} />
+        <Route path="/saved" element={<SavedJournals />} />
         <Route path="/splat" element={<SplatPage />} />
       </Routes>
     </Router>

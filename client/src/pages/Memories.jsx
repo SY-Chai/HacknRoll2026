@@ -1,90 +1,102 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Image as ImageIcon, Music, Type, ArrowLeft, Send, History, Trash2, Play, Pause, Loader2 } from 'lucide-react';
+import { Upload, Image as ImageIcon, Plus, X, ArrowLeft, Send, Loader2 } from 'lucide-react';
 import SceneViewer from '../components/SceneViewer';
 
 export default function Memories() {
     const navigate = useNavigate();
-    const [memories, setMemories] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
 
-    // Form State
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [imageFile, setImageFile] = useState(null);
-    const [audioFile, setAudioFile] = useState(null);
-    const [imagePreview, setImagePreview] = useState(null);
+    // Form State: Array of items { id, title, description, imageFile, imagePreview }
+    const [journalTitle, setJournalTitle] = useState('');
+    const [items, setItems] = useState([
+        { id: Date.now(), title: '', description: '', imageFile: null, imagePreview: null }
+    ]);
 
-    useEffect(() => {
-        fetchMemories();
-    }, []);
-
-    const fetchMemories = async () => {
-        setIsLoading(true);
-        try {
-            const response = await fetch('/api/memories');
-            const data = await response.json();
-            if (data.success) {
-                setMemories(data.data);
-            }
-        } catch (error) {
-            console.error("Failed to fetch memories:", error);
-        } finally {
-            setIsLoading(false);
-        }
+    const handleAddItem = () => {
+        setItems(prev => [
+            ...prev,
+            { id: Date.now(), title: '', description: '', imageFile: null, imagePreview: null }
+        ]);
     };
 
-    const handleImageChange = (e) => {
+    const handleRemoveItem = (id) => {
+        if (items.length === 1) return; // Keep at least one
+        setItems(prev => prev.filter(item => item.id !== id));
+    };
+
+    const updateItem = (id, field, value) => {
+        setItems(prev => prev.map(item => {
+            if (item.id === id) {
+                return { ...item, [field]: value };
+            }
+            return item;
+        }));
+    };
+
+    const handleImageChange = (id, e) => {
         const file = e.target.files[0];
         if (file) {
-            setImageFile(file);
             const reader = new FileReader();
-            reader.onloadend = () => setImagePreview(reader.result);
+            reader.onloadend = () => {
+                setItems(prev => prev.map(item => {
+                    if (item.id === id) {
+                        return { ...item, imageFile: file, imagePreview: reader.result };
+                    }
+                    return item;
+                }));
+            };
             reader.readAsDataURL(file);
         }
     };
 
-    const handleAudioChange = (e) => {
-        const file = e.target.files[0];
-        if (file) setAudioFile(file);
-    };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!description) return;
 
-        setIsUploading(true);
+        // Validation
+        const validItems = items.filter(i => i.imageFile && i.description);
+        if (validItems.length === 0) {
+            alert("Please add at least one memory with a photo and description.");
+            return;
+        }
+
+        setIsLoading(true);
         const formData = new FormData();
-        formData.append('title', title || 'Untitled Memory');
-        formData.append('description', description);
-        if (imageFile) formData.append('image', imageFile);
-        if (audioFile) formData.append('audio', audioFile);
+
+        // Construct Metadata Array
+        const metadata = validItems.map(item => ({
+            title: item.title || 'Untitled Memory',
+            description: item.description
+        }));
+
+        formData.append('items', JSON.stringify(metadata));
+        formData.append('journalTitle', journalTitle || 'My Journal');
+
+        // Append Files
+        validItems.forEach((item, index) => {
+            formData.append(`image_${index}`, item.imageFile);
+            // No audio upload anymore, auto-generated backend
+        });
 
         try {
-            const response = await fetch('/api/memories', {
+            const response = await fetch('/api/journal/create', {
                 method: 'POST',
                 body: formData
             });
+
             const data = await response.json();
             if (data.success) {
-                // Auto-save the new journal to local storage
-                const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
-                if (!savedIds.includes(data.journalId)) {
-                    localStorage.setItem('savedJournalIds', JSON.stringify([...savedIds, data.journalId]));
-                }
-
                 // Redirect to the new Journey
                 navigate(`/journey/${data.journalId}`);
             } else {
-                alert("Failed to upload: " + data.error);
+                alert("Failed to preserve memories: " + data.error);
             }
         } catch (error) {
             console.error("Upload error:", error);
             alert("Upload failed.");
         } finally {
-            setIsUploading(false);
+            setIsLoading(false);
         }
     };
 
@@ -98,26 +110,24 @@ export default function Memories() {
                 zIndex: 1
             }} />
 
-            <div className="container" style={{ position: 'relative', zIndex: 10, padding: '40px 20px' }}>
+            <div className="container" style={{ position: 'relative', zIndex: 10, padding: '40px 20px', maxWidth: '800px' }}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '40px' }}>
                     <button onClick={() => navigate('/')} className="glass-panel" style={{ padding: '12px', color: 'white' }}>
                         <ArrowLeft size={24} />
                     </button>
-                    <h1 className="glow-text" style={{ fontSize: '2.5rem', margin: 0 }}>My <span style={{ fontWeight: 700 }}>Memories</span></h1>
+                    <h1 className="glow-text" style={{ fontSize: '2.5rem', margin: 0 }}>Create a <span style={{ fontWeight: 700 }}>Journal</span></h1>
                 </div>
 
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="glass-panel"
-                    style={{ padding: '30px', borderRadius: '24px' }}
-                >
+                <div className="glass-panel" style={{ padding: '30px', borderRadius: '24px' }}>
                     <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <Upload size={20} color="#ffaa00" /> Share Your Memories
                     </h2>
+                    <p style={{ color: 'rgba(255,255,255,0.5)', marginBottom: '24px', fontSize: '0.9rem' }}>
+                        Upload your photos and tell their stories. We will enhance the images and generate a voice narration for you.
+                    </p>
 
-                    <form onSubmit={handleSubmit}>
+                    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
 
                         {/* Journal Title */}
                         <div>
@@ -125,113 +135,117 @@ export default function Memories() {
                             <input
                                 type="text"
                                 placeholder="E.g., Graduation"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
+                                value={journalTitle}
+                                onChange={(e) => setJournalTitle(e.target.value)}
                                 style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: 'white', outline: 'none' }}
                             />
                         </div>
 
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Your Story / Text</label>
-                            <textarea
-                                placeholder="Write something about this moment..."
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                rows={4}
-                                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: 'white', outline: 'none', resize: 'none' }}
-                                required
-                            />
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                            <div style={{ position: 'relative' }}>
-                                <input type="file" id="img-upload" hidden accept="image/*" onChange={handleImageChange} />
-                                <label htmlFor="img-upload" style={{
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                                    padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.2)',
-                                    borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s'
-                                }}>
-                                    <ImageIcon size={18} /> {imageFile ? 'Changing' : 'Add Photo'}
-                                </label>
-                            </div>
-                            <div style={{ position: 'relative' }}>
-                                <input type="file" id="audio-upload" hidden accept="audio/*" onChange={handleAudioChange} />
-                                <label htmlFor="audio-upload" style={{
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                                    padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.2)',
-                                    borderRadius: '12px', cursor: 'pointer'
-                                }}>
-                                    <Music size={18} /> {audioFile ? 'Added!' : 'Add Audio'}
-                                </label>
-                            </div>
-                        </div>
-
-                        {imagePreview && (
-                            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
-                                <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }} />
-                            </motion.div>
-                        )}
-
-                        <button
-                            type="submit"
-                            disabled={isUploading}
-                            style={{
-                                marginTop: '10px', padding: '16px', background: '#fff', color: '#000',
-                                borderRadius: '12px', fontWeight: 700, border: 'none', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                                opacity: isUploading ? 0.7 : 1
-                            }}
-                        >
-                            {isUploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
-                            {isUploading ? 'Preserving...' : 'Preserve Memory'}
-                        </button>
-                    </form>
-                </motion.div>
-
-                {/* Gallery Section */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    <h2 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <History size={20} color="#ffaa00" /> Preserved Stories
-                    </h2>
-
-                    {isLoading ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-                            <Loader2 size={32} className="spinner" color="rgba(255,255,255,0.2)" />
-                        </div>
-                    ) : memories.length === 0 ? (
-                        <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
-                            <p>No memories preserved yet. Start by creating one!</p>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            {memories.map((memory) => (
+                        <AnimatePresence>
+                            {items.map((item, index) => (
                                 <motion.div
-                                    key={memory.id}
-                                    initial={{ opacity: 0, y: 10 }}
+                                    key={item.id}
+                                    initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="glass-panel"
-                                    style={{ padding: '20px', borderRadius: '20px', display: 'flex', gap: '20px' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    style={{
+                                        background: 'rgba(255,255,255,0.03)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '16px',
+                                        padding: '20px',
+                                        position: 'relative'
+                                    }}
                                 >
-                                    {memory.image_url && (
-                                        <img src={memory.image_url} alt="" style={{ width: '120px', height: '120px', borderRadius: '12px', objectFit: 'cover' }} />
-                                    )}
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{memory.title}</h3>
-                                            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>{new Date(memory.created_at).toLocaleDateString()}</span>
-                                        </div>
-                                        <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                            {memory.description || memory.query}
-                                        </p>
-
-                                        {memory.audio_url && (
-                                            <audio controls src={memory.audio_url} style={{ marginTop: '12px', width: '100%', height: '32px' }} />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                        <h3 style={{ margin: 0, fontSize: '1rem', color: '#ffaa00' }}>Memory #{index + 1}</h3>
+                                        {items.length > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveItem(item.id)}
+                                                style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}
+                                            >
+                                                <X size={18} />
+                                            </button>
                                         )}
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '20px', flexDirection: 'column' }}>
+                                        {/* Image Upload */}
+                                        <div style={{ width: '100%' }}>
+                                            <input
+                                                type="file"
+                                                id={`img-${item.id}`}
+                                                hidden
+                                                accept="image/*"
+                                                onChange={(e) => handleImageChange(item.id, e)}
+                                            />
+                                            <label htmlFor={`img-${item.id}`} style={{
+                                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                                                padding: '20px', background: 'rgba(0,0,0,0.2)', border: '1px dashed rgba(255,255,255,0.2)',
+                                                borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s',
+                                                height: '200px', objectFit: 'cover', overflow: 'hidden'
+                                            }}>
+                                                {item.imagePreview ? (
+                                                    <img src={item.imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                                ) : (
+                                                    <>
+                                                        <ImageIcon size={32} color="rgba(255,255,255,0.5)" />
+                                                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>Click to Add Photo</span>
+                                                    </>
+                                                )}
+                                            </label>
+                                        </div>
+
+                                        {/* Text Fields */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Title of this memory..."
+                                                value={item.title}
+                                                onChange={(e) => updateItem(item.id, 'title', e.target.value)}
+                                                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', color: 'white', outline: 'none' }}
+                                            />
+                                            <textarea
+                                                placeholder="Describe exactly what happened here..."
+                                                value={item.description}
+                                                onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                                                rows={3}
+                                                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', color: 'white', outline: 'none', resize: 'vertical' }}
+                                                required
+                                            />
+                                        </div>
                                     </div>
                                 </motion.div>
                             ))}
-                        </div>
-                    )}
+                        </AnimatePresence>
+
+                        <button
+                            type="button"
+                            onClick={handleAddItem}
+                            className="glass-panel"
+                            style={{
+                                padding: '12px', border: '1px dashed rgba(255,255,255,0.3)', background: 'transparent',
+                                color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                            }}
+                        >
+                            <Plus size={20} /> Add Another Photo
+                        </button>
+
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            style={{
+                                marginTop: '10px', padding: '16px', background: '#ffaa00', color: '#000',
+                                borderRadius: '12px', fontWeight: 700, border: 'none', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                                opacity: isLoading ? 0.7 : 1,
+                                fontSize: '1.1rem'
+                            }}
+                        >
+                            {isLoading ? <Loader2 size={24} className="spinner" /> : <Send size={24} />}
+                            {isLoading ? 'Processing Journal...' : 'Create Journal'}
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>

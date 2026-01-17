@@ -48,7 +48,7 @@ function PlaceholderModel({ type }) {
     );
 }
 
-export default function SceneViewer({ visualFocus }) {
+export default function SceneViewer({ visualFocus, splatUrl }) {
     return (
         <div className="full-screen" style={{ position: 'absolute', top: 0, left: 0, zIndex: 0 }}>
             <Canvas camera={{ position: [0, 0, 6], fov: 45 }}>

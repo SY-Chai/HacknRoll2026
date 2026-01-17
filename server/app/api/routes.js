@@ -2,7 +2,7 @@ import express from 'express';
 import axios from 'axios';
 import multer from 'multer';
 import { searchPhotographs } from '../scraper/nasScraper.js';
-import { enhanceDescription, generateAudio, colorizeImage } from '../agent/researchAgent.js';
+import { enhanceDescription, generateAudio, processAndEnhanceImage } from '../agent/researchAgent.js';
 import { supabase } from '../config/supabase.js';
 import { r2Client, R2_BUCKETS, R2_DOMAINS } from '../config/r2.js';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
@@ -264,14 +264,14 @@ router.post("/colorize-image", async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "Image URL is required" });
 
-    console.log(`Colorizing image on-demand: ${url}`);
-    const colorizedFile = await colorizeImage(url);
+    console.log(`Processing/Enhancing image on-demand: ${url}`);
+    const colorizedFile = await processAndEnhanceImage(url);
 
     if (!colorizedFile) {
-      return res.status(500).json({ error: "Colorization failed" });
+      return res.status(500).json({ error: "Processing/Colorization failed" });
     }
 
-    res.json({ success: true, colorUrl: `/color/${colorizedFile}` });
+    res.json({ success: true, colorUrl: `/enhanced_cache/${colorizedFile}` }); // Changed from /color/ to /enhanced_cache/
   } catch (error) {
     console.error("Colorize API Error:", error);
     res.status(500).json({ error: error.message });

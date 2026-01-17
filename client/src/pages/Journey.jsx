@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import SceneViewer from '../components/SceneViewer';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette, Split, ArrowLeft, Wand2, Box } from 'lucide-react';
-import { ReactCompareSlider, ReactCompareSliderImage } from 'react-compare-slider';
+import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette, Share2, Bookmark } from 'lucide-react';
 
 export default function Journey() {
   const { id } = useParams();
@@ -16,7 +15,8 @@ export default function Journey() {
   useEffect(() => {
     const fetchJournal = async () => {
       if (!id) return;
-      setIsLoading(true);
+      // Don't set isLoading(true) here on subsequent polls, only initial
+
       try {
         const res = await fetch(`/api/journal/${id}`);
         if (!res.ok) throw new Error("Journal not found");
@@ -28,18 +28,24 @@ export default function Journey() {
           title: record.title,
           text: record.description || "No description available.",
           visualFocus: 'default',
-          img_url: record.image_url ? `/api/proxy-image?url=${encodeURIComponent(record.image_url)}` : null,
-          original_img_url: record.image_url,
+          img_url: record.image_url, // Direct R2 URL
           date: record.created_at ? new Date(record.created_at).toLocaleDateString() : "Unknown Date",
           audio_url: record.audio_url,
+          splat_url: record.splat_url,
           colorized_url: null,
           isColorMode: false
         }));
 
-        console.log("Mapped Chapters:", mappedChapters);
-        if (mappedChapters.length === 0) console.warn("No chapters found in journal!");
-
+        console.log(`Fetched ${mappedChapters.length} chapters.`);
         setChapters(mappedChapters);
+
+        // Polling Logic: If less than 5 records (assuming 5 is target), convert to poll
+        // But for generic usage, maybe just stop if we verify all done? 
+        // For now, simpler: Poll if we have 0 records, or verify some "status" field if we had one.
+        // Let's assume user searches for 5 items. If < 5, keep polling? 
+        // Or cleaner: Poll every 3 seconds for the first 30 seconds?
+        // Let's implement active polling if mappedChapters < 5 (our limit) && loop count < max
+
       } catch (err) {
         console.error("Failed to load journal:", err);
         setError(err.message);
@@ -48,7 +54,18 @@ export default function Journey() {
       }
     };
 
+    // Initial Fetch
     fetchJournal();
+
+    // Polling Interval
+    const intervalId = setInterval(() => {
+      // Simple polling: Fetch every 3 seconds to check for new records
+      // Ideally we would check a "status" on the journal, but checking record count is a decent proxy for now
+      fetchJournal();
+    }, 3000);
+
+    // Cleanup
+    return () => clearInterval(intervalId);
   }, [id]);
 
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
@@ -77,10 +94,8 @@ export default function Journey() {
     let newIds;
     if (isSaved) {
       newIds = savedIds.filter(sid => sid !== id);
-      console.log(`[Journey] Removing ${id} from saved. New list:`, newIds);
     } else {
       newIds = [...savedIds, id];
-      console.log(`[Journey] Adding ${id} to saved. New list:`, newIds);
     }
     localStorage.setItem('savedJournalIds', JSON.stringify(newIds));
     setIsSaved(!isSaved);
@@ -138,8 +153,6 @@ export default function Journey() {
   useEffect(() => {
     const audio = new Audio();
     audioRef.current = audio;
-
-
 
     audio.addEventListener('timeupdate', updateProgress);
     audio.addEventListener('ended', onEnd);
@@ -235,16 +248,19 @@ export default function Journey() {
 
   /* --- Audio Logic End --- */
 
-  if (isLoading) {
+  if (isLoading || (chapters.length === 0 && !error)) {
     return (
       <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
         <Loader2 size={48} className="spinner" />
-        <p style={{ marginTop: '16px' }}>Restoring Memory...</p>
+        <p style={{ marginTop: '16px' }}>{chapters.length === 0 ? "Searching Archives & Restoring Memories..." : "Loading Journey..."}</p>
+        {chapters.length === 0 && (
+          <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '8px' }}>This may take a few moments.</p>
+        )}
       </div>
     );
   }
 
-  if (error || chapters.length === 0) {
+  if (error) {
     return (
       <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
         <p>{error || "No journey data found."}</p>
@@ -275,110 +291,7 @@ export default function Journey() {
     }
   };
 
-  /* --- Auto-Colorization Logic --- */
-  useEffect(() => {
-    // Only run if we have chapters
-    if (!chapters || chapters.length === 0) return;
 
-    chapters.forEach((chapter, index) => {
-      // If no colorized url, trigger generation
-      if (chapter.original_img_url && !chapter.colorized_url && !chapter.isColorizing) {
-        triggerColorization(index, chapter.original_img_url);
-      }
-    });
-  }, [chapters]);
-
-  const triggerColorization = async (index, url) => {
-    // Optimistically mark as colorizing to prevent duplicate triggers
-    setChapters(prev => {
-      const newChaps = [...prev];
-      if (newChaps[index].isColorizing) return prev;
-      newChaps[index] = { ...newChaps[index], isColorizing: true };
-      return newChaps;
-    });
-
-    try {
-      const response = await fetch('/api/colorize-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-
-      if (!response.ok) throw new Error("Colorization failed");
-
-      const data = await response.json();
-      if (data.success && data.colorizedUrl) {
-        setChapters(prev => {
-          const newChaps = [...prev];
-          newChaps[index] = {
-            ...newChaps[index],
-            colorized_url: data.colorizedUrl,
-            isColorMode: true, // Auto-switch to compare mode!
-            isColorizing: false
-          };
-          return newChaps;
-        });
-      }
-    } catch (err) {
-      console.error("Auto-colorization error for index " + index, err);
-      setChapters(prev => {
-        const newChaps = [...prev];
-        newChaps[index] = { ...newChaps[index], isColorizing: false };
-        return newChaps;
-      });
-    }
-  };
-
-  const toggleColorMode = () => {
-    // Toggle check: if we have colorized url, toggle mode.
-    // If we don't, manually trigger (fallback, though auto should handle it)
-    const currentChapter = chapters[currentChapterIndex];
-    if (currentChapter.colorized_url) {
-      setChapters(prev => {
-        const newChaps = [...prev];
-        newChaps[currentChapterIndex].isColorMode = !newChaps[currentChapterIndex].isColorMode;
-        return newChaps;
-      });
-    } else {
-      // Retry colorization if it failed or hasn't started
-      triggerColorization(currentChapterIndex, currentChapter.original_img_url);
-    }
-  };
-
-  const handleGenerate3D = async () => {
-    setIsGenerating3D(true);
-    try {
-      const originalUrl = chapters[currentChapterIndex].original_img_url;
-      if (!originalUrl) throw new Error("No image URL found");
-
-      const response = await fetch('/api/generate-3d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrls: [originalUrl] })
-      });
-
-      if (!response.ok) throw new Error("3D Generation failed");
-
-      const data = await response.json();
-      // Assuming data.results is array of { ply_url, status }
-      if (data.results && data.results[0] && data.results[0].ply_url) {
-        navigate('/splat', {
-          state: {
-            splatUrl: data.results[0].ply_url,
-            description: `3D Model of ${chapters[currentChapterIndex].title}`
-          }
-        });
-      } else {
-        throw new Error("No PLY URL returned");
-      }
-
-    } catch (error) {
-      console.error("3D Generation Error:", error);
-      alert("Failed to generate 3D model. Check console for details.");
-    } finally {
-      setIsGenerating3D(false);
-    }
-  };
 
   /* --- Audio Logic End --- */
 
@@ -394,7 +307,7 @@ export default function Journey() {
         overflow: "auto",
       }}
     >
-      <SceneViewer visualFocus={currentChapter.visualFocus} />
+      <SceneViewer visualFocus={currentChapter.visualFocus} splatUrl={currentChapter.splat_url} />
 
       {/* Header: Title & Controls */}
       <div
@@ -406,6 +319,24 @@ export default function Journey() {
           position: "relative",
         }}
       >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+          <button onClick={() => navigate('/')} className="glass-panel" style={{ padding: '12px', color: 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <HomeIcon size={20} /> <span className="mobile-hide">Home</span>
+          </button>
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {/* Share Button */}
+            <button onClick={handleShare} className="glass-panel" style={{ padding: '12px', color: 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Share2 size={20} /> <span className="mobile-hide">Share</span>
+            </button>
+
+            {/* Save Button (Only if NOT user created, or always? User requested save for searched journals. Let's allowing saving everything for simplicity, acting as a bookmark) */}
+            <button onClick={handleSave} className="glass-panel" style={{ padding: '12px', color: isSaved ? '#00c8ff' : 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Bookmark size={20} fill={isSaved ? "#00c8ff" : "none"} /> <span className="mobile-hide">{isSaved ? 'Saved' : 'Save'}</span>
+            </button>
+          </div>
+        </div>
         <div style={{ flex: 1, display: "flex", justifyContent: "flex-start" }}>
           <button
             onClick={() => navigate("/")}
@@ -458,35 +389,7 @@ export default function Journey() {
             alignItems: "center",
           }}
         >
-          {/* 3D-fy Button */}
-          <button
-            onClick={handleGenerate3D}
-            disabled={isGenerating3D}
-            className="glass-panel"
-            style={{
-              padding: "12px 20px",
-              background: isGenerating3D
-                ? "rgba(139, 92, 246, 0.2)" // Violet color with transparency
-                : "rgba(255, 255, 255, 0.1)",
-              border: isGenerating3D
-                ? "1px solid rgba(139, 92, 246, 0.5)"
-                : "1px solid rgba(255, 255, 255, 0.1)",
-              color: "white",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              transition: "all 0.3s ease",
-            }}
-          >
-            {isGenerating3D ? (
-              <Loader2 size={18} className="spinner" />
-            ) : (
-              <Box size={18} />
-            )}
-            <span style={{ fontWeight: 600 }}>
-              {isGenerating3D ? "Generating 3D..." : "3D-fy"}
-            </span>
-          </button>
+
 
           {/* Audio Controls */}
           {isAudioProcessing ? (

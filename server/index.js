@@ -17,6 +17,7 @@ app.use(express.json());
 // Serve audio files and colorized images from tmp directory
 app.use('/audio', express.static(path.join(process.cwd(), 'tmp')));
 app.use('/color', express.static(path.join(process.cwd(), 'tmp', 'color_cache')));
+app.use('/enhanced_cache', express.static(path.join(process.cwd(), 'tmp', 'enhanced_cache')));
 
 import journalRoutes from './app/api/journalRoutes.js';
 

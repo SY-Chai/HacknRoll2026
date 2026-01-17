@@ -280,12 +280,12 @@ export default function Home() {
                             e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
                         }}
                     >
-                        <History size={18} />
-                        My Memories
+                        <Sparkles size={18} />
+                        Create Journal
                     </button>
 
                     <button
-                        onClick={() => navigate('/splat')}
+                        onClick={() => navigate('/saved')}
                         style={{
                             background: 'rgba(255, 255, 255, 0.05)',
                             color: 'white',
@@ -309,8 +309,8 @@ export default function Home() {
                             e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
                         }}
                     >
-                        <Sparkles size={18} />
-                        View Splat
+                        <History size={18} />
+                        Saved Journals
                     </button>
                 </motion.div>
 
