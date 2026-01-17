@@ -107,7 +107,12 @@ export default function Memories() {
                     <h1 className="glow-text" style={{ fontSize: '2.5rem', margin: 0 }}>My <span style={{ fontWeight: 700 }}>Memories</span></h1>
                 </div>
 
-                <div className="glass-panel" style={{ padding: '30px', borderRadius: '24px' }}>
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="glass-panel"
+                    style={{ padding: '30px', borderRadius: '24px' }}
+                >
                     <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <Upload size={20} color="#ffaa00" /> Share Your Memories
                     </h2>
@@ -120,115 +125,113 @@ export default function Memories() {
                             <input
                                 type="text"
                                 placeholder="E.g., Graduation"
-                                value={journalTitle}
-                                onChange={(e) => setJournalTitle(e.target.value)}
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
                                 style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: 'white', outline: 'none' }}
                             />
                         </div>
 
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Your Story / Text</label>
-                                    <textarea
-                                        placeholder="Write something about this moment..."
-                                        value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
-                                        rows={4}
-                                        style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: 'white', outline: 'none', resize: 'none' }}
-                                        required
-                                    />
-                                </div>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                    <div style={{ position: 'relative' }}>
-                                        <input type="file" id="img-upload" hidden accept="image/*" onChange={handleImageChange} />
-                                        <label htmlFor="img-upload" style={{
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                                            padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.2)',
-                                            borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s'
-                                        }}>
-                                            <ImageIcon size={18} /> {imageFile ? 'Changing' : 'Add Photo'}
-                                        </label>
-                                    </div>
-                                    <div style={{ position: 'relative' }}>
-                                        <input type="file" id="audio-upload" hidden accept="audio/*" onChange={handleAudioChange} />
-                                        <label htmlFor="audio-upload" style={{
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                                            padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.2)',
-                                            borderRadius: '12px', cursor: 'pointer'
-                                        }}>
-                                            <Music size={18} /> {audioFile ? 'Added!' : 'Add Audio'}
-                                        </label>
-                                    </div>
-                                </div>
-
-                                {imagePreview && (
-                                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
-                                        <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }} />
-                                    </motion.div>
-                                )}
-
-                                <button
-                                    type="submit"
-                                    disabled={isUploading}
-                                    style={{
-                                        marginTop: '10px', padding: '16px', background: '#fff', color: '#000',
-                                        borderRadius: '12px', fontWeight: 700, border: 'none', cursor: 'pointer',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-                                        opacity: isUploading ? 0.7 : 1
-                                    }}
-                                >
-                                    {isUploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
-                                    {isUploading ? 'Preserving...' : 'Preserve Memory'}
-                                </button>
-                            </form>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Your Story / Text</label>
+                            <textarea
+                                placeholder="Write something about this moment..."
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                rows={4}
+                                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: 'white', outline: 'none', resize: 'none' }}
+                                required
+                            />
                         </div>
-                    </motion.div>
 
-                    {/* Gallery Section */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        <h2 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <History size={20} color="#ffaa00" /> Preserved Stories
-                        </h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                            <div style={{ position: 'relative' }}>
+                                <input type="file" id="img-upload" hidden accept="image/*" onChange={handleImageChange} />
+                                <label htmlFor="img-upload" style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                                    padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.2)',
+                                    borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s'
+                                }}>
+                                    <ImageIcon size={18} /> {imageFile ? 'Changing' : 'Add Photo'}
+                                </label>
+                            </div>
+                            <div style={{ position: 'relative' }}>
+                                <input type="file" id="audio-upload" hidden accept="audio/*" onChange={handleAudioChange} />
+                                <label htmlFor="audio-upload" style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                                    padding: '12px', background: 'rgba(255,255,255,0.05)', border: '1px dashed rgba(255,255,255,0.2)',
+                                    borderRadius: '12px', cursor: 'pointer'
+                                }}>
+                                    <Music size={18} /> {audioFile ? 'Added!' : 'Add Audio'}
+                                </label>
+                            </div>
+                        </div>
 
-                        {isLoading ? (
-                            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-                                <Loader2 size={32} className="spinner" color="rgba(255,255,255,0.2)" />
-                            </div>
-                        ) : memories.length === 0 ? (
-                            <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
-                                <p>No memories preserved yet. Start by creating one!</p>
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                {memories.map((memory) => (
-                                    <motion.div
-                                        key={memory.id}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="glass-panel"
-                                        style={{ padding: '20px', borderRadius: '20px', display: 'flex', gap: '20px' }}
-                                    >
-                                        {memory.image_url && (
-                                            <img src={memory.image_url} alt="" style={{ width: '120px', height: '120px', borderRadius: '12px', objectFit: 'cover' }} />
-                                        )}
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{memory.title}</h3>
-                                                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>{new Date(memory.created_at).toLocaleDateString()}</span>
-                                            </div>
-                                            <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                                {memory.description || memory.query}
-                                            </p>
-
-                                            {memory.audio_url && (
-                                                <audio controls src={memory.audio_url} style={{ marginTop: '12px', width: '100%', height: '32px' }} />
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </div>
+                        {imagePreview && (
+                            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+                                <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                            </motion.div>
                         )}
-                    </div>
+
+                        <button
+                            type="submit"
+                            disabled={isUploading}
+                            style={{
+                                marginTop: '10px', padding: '16px', background: '#fff', color: '#000',
+                                borderRadius: '12px', fontWeight: 700, border: 'none', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                                opacity: isUploading ? 0.7 : 1
+                            }}
+                        >
+                            {isUploading ? <Loader2 size={20} className="spinner" /> : <Send size={20} />}
+                            {isUploading ? 'Preserving...' : 'Preserve Memory'}
+                        </button>
+                    </form>
+                </motion.div>
+
+                {/* Gallery Section */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    <h2 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <History size={20} color="#ffaa00" /> Preserved Stories
+                    </h2>
+
+                    {isLoading ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                            <Loader2 size={32} className="spinner" color="rgba(255,255,255,0.2)" />
+                        </div>
+                    ) : memories.length === 0 ? (
+                        <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+                            <p>No memories preserved yet. Start by creating one!</p>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            {memories.map((memory) => (
+                                <motion.div
+                                    key={memory.id}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="glass-panel"
+                                    style={{ padding: '20px', borderRadius: '20px', display: 'flex', gap: '20px' }}
+                                >
+                                    {memory.image_url && (
+                                        <img src={memory.image_url} alt="" style={{ width: '120px', height: '120px', borderRadius: '12px', objectFit: 'cover' }} />
+                                    )}
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{memory.title}</h3>
+                                            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>{new Date(memory.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                        <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                            {memory.description || memory.query}
+                                        </p>
+
+                                        {memory.audio_url && (
+                                            <audio controls src={memory.audio_url} style={{ marginTop: '12px', width: '100%', height: '32px' }} />
+                                        )}
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

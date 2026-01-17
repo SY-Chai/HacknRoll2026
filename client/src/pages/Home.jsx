@@ -178,7 +178,7 @@ export default function Home() {
 
                         <input
                             type="text"
-                            placeholder="Try searching '1960s Chinatown'..."
+                            placeholder="Try searching 'Chinatown'..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             style={{
