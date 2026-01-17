@@ -69,14 +69,14 @@ export default function Memories() {
             });
             const data = await response.json();
             if (data.success) {
-                // Reset Form
-                setTitle('');
-                setDescription('');
-                setImageFile(null);
-                setAudioFile(null);
-                setImagePreview(null);
-                // Refresh List
-                fetchMemories();
+                // Auto-save the new journal to local storage
+                const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+                if (!savedIds.includes(data.journalId)) {
+                    localStorage.setItem('savedJournalIds', JSON.stringify([...savedIds, data.journalId]));
+                }
+
+                // Redirect to the new Journey
+                navigate(`/journey/${data.journalId}`);
             } else {
                 alert("Failed to upload: " + data.error);
             }
@@ -107,29 +107,24 @@ export default function Memories() {
                     <h1 className="glow-text" style={{ fontSize: '2.5rem', margin: 0 }}>My <span style={{ fontWeight: 700 }}>Memories</span></h1>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', alignItems: 'start' }}>
+                <div className="glass-panel" style={{ padding: '30px', borderRadius: '24px' }}>
+                    <h2 style={{ fontSize: '1.25rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Upload size={20} color="#ffaa00" /> Share Your Memories
+                    </h2>
 
-                    {/* Upload Section */}
-                    <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                    >
-                        <div className="glass-panel" style={{ padding: '30px', borderRadius: '24px' }}>
-                            <h2 style={{ fontSize: '1.25rem', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <Upload size={20} color="#ffaa00" /> Save a New Memory
-                            </h2>
+                    <form onSubmit={handleSubmit}>
 
-                            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Memory Title</label>
-                                    <input
-                                        type="text"
-                                        placeholder="E.g., Sunday at East Coast Park"
-                                        value={title}
-                                        onChange={(e) => setTitle(e.target.value)}
-                                        style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: 'white', outline: 'none' }}
-                                    />
-                                </div>
+                        {/* Journal Title */}
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Journal Title (Optional)</label>
+                            <input
+                                type="text"
+                                placeholder="E.g., Graduation"
+                                value={journalTitle}
+                                onChange={(e) => setJournalTitle(e.target.value)}
+                                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: 'white', outline: 'none' }}
+                            />
+                        </div>
 
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>Your Story / Text</label>

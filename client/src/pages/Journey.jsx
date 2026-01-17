@@ -63,6 +63,33 @@ export default function Journey() {
 
   // UI State
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  // Check if saved on load
+  useEffect(() => {
+    if (!id) return;
+    const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+    setIsSaved(savedIds.includes(id));
+  }, [id]);
+
+  const handleSave = () => {
+    const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+    let newIds;
+    if (isSaved) {
+      newIds = savedIds.filter(sid => sid !== id);
+      console.log(`[Journey] Removing ${id} from saved. New list:`, newIds);
+    } else {
+      newIds = [...savedIds, id];
+      console.log(`[Journey] Adding ${id} to saved. New list:`, newIds);
+    }
+    localStorage.setItem('savedJournalIds', JSON.stringify(newIds));
+    setIsSaved(!isSaved);
+  };
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    alert("Journey link copied to clipboard!");
+  };
 
   const audioRef = useRef(null);
   const currentChapter = chapters[currentChapterIndex];
