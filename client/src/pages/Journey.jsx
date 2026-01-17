@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import SceneViewer from "../components/SceneViewer";
+import SplatViewer from "../components/SplatViewer";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -57,6 +58,8 @@ export default function Journey() {
           audio_url: record.audio_url,
           colorized_url: null,
           isColorMode: false,
+          splat_url: null,
+          is3DGenerating: false,
         }));
 
         console.log("Mapped Chapters:", mappedChapters);
@@ -78,7 +81,7 @@ export default function Journey() {
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
 
   // Audio State
-  const [isMuted, setIsMuted] = useState(true); // Default to Muted
+  const [isMuted, setIsMuted] = useState(false); // Default to Playing
   const [audioProgress, setAudioProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isAudioProcessing, setIsAudioProcessing] = useState(false);
@@ -351,6 +354,95 @@ export default function Journey() {
     });
   }, [chapters]);
 
+  /* --- Auto-3D Generation Logic (Batched) --- */
+  useEffect(() => {
+    // Only run if we have chapters
+    if (!chapters || chapters.length === 0) return;
+
+    // Check if there are any chapters that need 3D generation
+    const chaptersNeedingGeneration = chapters
+      .map((chapter, index) => ({ chapter, index }))
+      .filter(
+        ({ chapter }) =>
+          chapter.original_img_url &&
+          !chapter.splat_url &&
+          !chapter.is3DGenerating,
+      );
+
+    if (chaptersNeedingGeneration.length === 0) return;
+
+    // Already generating a batch
+    if (chapters.some((ch) => ch.is3DGenerating)) return;
+
+    // Batch generate all at once
+    batchGenerate3D(chaptersNeedingGeneration);
+  }, [chapters]);
+
+  const batchGenerate3D = async (chaptersToGenerate) => {
+    const imageUrls = chaptersToGenerate.map(
+      ({ chapter }) => chapter.original_img_url,
+    );
+    const indices = chaptersToGenerate.map(({ index }) => index);
+
+    // Mark all as generating
+    setChapters((prev) => {
+      const newChaps = [...prev];
+      indices.forEach((idx) => {
+        newChaps[idx] = { ...newChaps[idx], is3DGenerating: true };
+      });
+      return newChaps;
+    });
+
+    try {
+      console.log(`Batch generating 3D for ${imageUrls.length} images...`);
+      const response = await fetch("/api/generate-3d", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrls }),
+      });
+
+      if (!response.ok) throw new Error("3D Generation failed");
+
+      const data = await response.json();
+      if (data.success && data.results) {
+        setChapters((prev) => {
+          const newChaps = [...prev];
+          data.results.forEach((result, resultIndex) => {
+            const chapterIndex = indices[resultIndex];
+            if (result && result.ply_url) {
+              newChaps[chapterIndex] = {
+                ...newChaps[chapterIndex],
+                splat_url: result.ply_url,
+                is3DGenerating: false,
+              };
+              console.log(
+                `3D generated successfully for chapter ${chapterIndex}`,
+              );
+            } else {
+              // Failed for this particular image
+              newChaps[chapterIndex] = {
+                ...newChaps[chapterIndex],
+                is3DGenerating: false,
+              };
+              console.warn(`3D generation failed for chapter ${chapterIndex}`);
+            }
+          });
+          return newChaps;
+        });
+      }
+    } catch (err) {
+      console.error("Batch 3D generation error:", err);
+      // Mark all as failed
+      setChapters((prev) => {
+        const newChaps = [...prev];
+        indices.forEach((idx) => {
+          newChaps[idx] = { ...newChaps[idx], is3DGenerating: false };
+        });
+        return newChaps;
+      });
+    }
+  };
+
   /* --- 3D Generation Function --- */
   const handleGenerate3D = async () => {
     setIsGenerating3D(true);
@@ -509,96 +601,15 @@ export default function Journey() {
             gap: "12px",
             alignItems: "center",
           }}
-        >
-          {/* 3D-fy Button */}
-          <button
-            onClick={handleGenerate3D}
-            disabled={isGenerating3D}
-            className="glass-panel"
-            style={{
-              padding: "12px 20px",
-              background: isGenerating3D
-                ? "rgba(139, 92, 246, 0.2)" // Violet color with transparency
-                : "rgba(255, 255, 255, 0.1)",
-              border: isGenerating3D
-                ? "1px solid rgba(139, 92, 246, 0.5)"
-                : "1px solid rgba(255, 255, 255, 0.1)",
-              color: "white",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              transition: "all 0.3s ease",
-            }}
-          >
-            {isGenerating3D ? (
-              <Loader2 size={18} className="spinner" />
-            ) : (
-              <Box size={18} />
-            )}
-            <span style={{ fontWeight: 600 }}>
-              {isGenerating3D ? "Generating 3D..." : "3D-fy"}
-            </span>
-          </button>
-
-          {/* Audio Controls */}
-          {isAudioProcessing ? (
-            <div
-              className="glass-panel"
-              style={{
-                padding: "12px",
-                color: "rgba(255,255,255,0.5)",
-                display: "flex",
-                gap: "8px",
-                alignItems: "center",
-              }}
-            >
-              <Loader2 size={16} className="spinner" />
-              <span style={{ fontSize: "0.8rem" }}>Generating Voice...</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsMuted(!isMuted)}
-              className="glass-panel"
-              disabled={!currentChapter.audio_url}
-              style={{
-                padding: "12px 24px",
-                background: isMuted
-                  ? "rgba(255, 170, 0, 0.2)"
-                  : "rgba(255, 255, 255, 0.1)",
-                border: isMuted
-                  ? "1px solid rgba(255, 170, 0, 0.5)"
-                  : "1px solid rgba(255, 255, 255, 0.1)",
-                color: "white",
-                cursor: currentChapter.audio_url ? "pointer" : "not-allowed",
-                opacity: currentChapter.audio_url ? 1 : 0.5,
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                transition: "all 0.3s ease",
-              }}
-            >
-              {isMuted ? (
-                <Play size={20} fill="currentColor" />
-              ) : (
-                <Pause size={20} fill="currentColor" />
-              )}
-              <span style={{ fontWeight: 600 }}>
-                {isMuted ? "Play" : "Pause"}
-              </span>
-            </button>
-          )}
-        </div>
+        ></div>
       </div>
 
-      {/* Main Content: Carousel */}
+      {/* Main Content: Full Screen 3D Viewer */}
       <div
         style={{
           flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
           position: "relative",
-          zIndex: 10,
+          zIndex: 5,
         }}
       >
         {/* Previous Image */}
@@ -660,27 +671,70 @@ export default function Journey() {
           <ChevronLeft size={32} />
         </button>
 
-        {/* Current Image */}
+        {/* Current 3D View / Image - Full Screen */}
         <motion.div
           key={currentChapter.id}
           initial={{ opacity: 0, scale: 1 }}
           animate={{ opacity: 1, scale: 1, filter: "blur(0px)", x: 0 }}
           transition={{ duration: 0.3 }}
-          onClick={() => currentChapter.img_url && setIsLightboxOpen(true)}
           style={{
-            height: "65%",
-            aspectRatio: "4/3",
-            borderRadius: "16px",
-            overflow: "hidden",
-            boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
-            border: "4px solid rgba(255,255,255,0.1)",
-            zIndex: 15,
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            zIndex: 5,
             background: "#111",
-            cursor: "zoom-in",
-            position: "relative",
           }}
         >
-          {currentChapter.img_url ? (
+          {/* Show 3D Splat if available, otherwise show 2D image */}
+          {currentChapter.splat_url ? (
+            <>
+              <div
+                style={{ width: "100%", height: "100%", position: "relative" }}
+              >
+                <SplatViewer url={currentChapter.splat_url} />
+              </div>
+            </>
+          ) : currentChapter.is3DGenerating ? (
+            // Show loading state while 3D is generating
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#111",
+                gap: "16px",
+              }}
+            >
+              <Loader2 size={48} className="spinner" color="white" />
+              <p style={{ color: "#aaa", fontSize: "0.95rem" }}>
+                Generating 3D view...
+              </p>
+              {/* Show 2D image in background while generating */}
+              {currentChapter.img_url && (
+                <img
+                  src={currentChapter.img_url}
+                  alt={currentChapter.title}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    opacity: 0.3,
+                    filter: "blur(4px)",
+                    zIndex: 0,
+                  }}
+                />
+              )}
+            </div>
+          ) : currentChapter.img_url ? (
+            // Fallback to 2D image if 3D generation failed or hasn't started
             <>
               {currentChapter.isColorMode && currentChapter.colorized_url ? (
                 <ReactCompareSlider
@@ -704,6 +758,7 @@ export default function Journey() {
                 <img
                   src={currentChapter.img_url}
                   alt={currentChapter.title}
+                  onClick={() => setIsLightboxOpen(true)}
                   style={{
                     position: "absolute",
                     top: 0,
@@ -712,46 +767,10 @@ export default function Journey() {
                     height: "100%",
                     objectFit: "contain",
                     background: "#000",
-                    transition: "opacity 0.4s ease",
+                    cursor: "zoom-in",
                   }}
                 />
               )}
-
-              {isColorizing && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    background: "rgba(0,0,0,0.4)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    zIndex: 10,
-                  }}
-                >
-                  <Loader2 size={40} className="spinner" color="white" />
-                </div>
-              )}
-
-              <div
-                className="hover-hint"
-                style={{
-                  position: "absolute",
-                  top: 12,
-                  right: 12,
-                  background: "rgba(0,0,0,0.6)",
-                  borderRadius: "50%",
-                  padding: "8px",
-                  opacity: 0,
-                  transition: "opacity 0.2s",
-                  zIndex: 20,
-                }}
-              >
-                <Maximize2 size={20} color="white" />
-              </div>
             </>
           ) : (
             <div
@@ -764,7 +783,7 @@ export default function Journey() {
                 background: "#222",
               }}
             >
-              <p style={{ color: "#666" }}>No Image</p>
+              <p style={{ color: "#666" }}>No Content Available</p>
             </div>
           )}
         </motion.div>
@@ -839,7 +858,6 @@ export default function Journey() {
         style={{
           padding: "0 48px 20px",
           zIndex: 10,
-          textAlign: "center",
           background: "linear-gradient(to top, rgba(0,0,0,0.9), transparent)",
           maxHeight: "40vh",
           display: "flex",
@@ -849,25 +867,129 @@ export default function Journey() {
           marginTop: "-20px",
         }}
       >
-        <motion.div
-          key={currentChapter.text}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-panel custom-scrollbar"
+        <div
           style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "16px",
             maxWidth: "1000px",
             width: "90vw",
             margin: "0 auto",
-            padding: "16px 24px",
-            fontSize: "1rem",
-            color: "#ddd",
-            lineHeight: 1.6,
-            overflowY: "auto",
-            maxHeight: "100%",
           }}
         >
-          {currentChapter.text}
-        </motion.div>
+          {/* 2D Thumbnail beside caption */}
+          {currentChapter.splat_url && currentChapter.img_url && (
+            <div
+              onClick={() => setIsLightboxOpen(true)}
+              style={{
+                width: "140px",
+                height: "105px",
+                borderRadius: "8px",
+                overflow: "hidden",
+                border: "2px solid rgba(255,255,255,0.3)",
+                cursor: "pointer",
+                transition: "transform 0.2s",
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.transform = "scale(1.05)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.transform = "scale(1)")
+              }
+            >
+              <img
+                src={currentChapter.img_url}
+                alt="2D View"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+            </div>
+          )}
+
+          {/* Caption and Audio Controls */}
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+            }}
+          >
+            <motion.div
+              key={currentChapter.text}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-panel custom-scrollbar"
+              style={{
+                padding: "16px 24px",
+                fontSize: "1rem",
+                color: "#ddd",
+                lineHeight: 1.6,
+                overflowY: "auto",
+                maxHeight: "150px",
+                textAlign: "left",
+              }}
+            >
+              {currentChapter.text}
+            </motion.div>
+
+            {/* Audio Controls beside caption */}
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              {isAudioProcessing ? (
+                <div
+                  className="glass-panel"
+                  style={{
+                    padding: "8px 12px",
+                    color: "rgba(255,255,255,0.5)",
+                    display: "flex",
+                    gap: "8px",
+                    alignItems: "center",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  <Loader2 size={14} className="spinner" />
+                  <span>Generating Voice...</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="glass-panel"
+                  disabled={!currentChapter.audio_url}
+                  style={{
+                    padding: "8px 16px",
+                    background: !isMuted
+                      ? "rgba(255, 170, 0, 0.2)"
+                      : "rgba(255, 255, 255, 0.1)",
+                    border: !isMuted
+                      ? "1px solid rgba(255, 170, 0, 0.5)"
+                      : "1px solid rgba(255, 255, 255, 0.1)",
+                    color: "white",
+                    cursor: currentChapter.audio_url
+                      ? "pointer"
+                      : "not-allowed",
+                    opacity: currentChapter.audio_url ? 1 : 0.5,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    transition: "all 0.3s ease",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {isMuted ? (
+                    <Play size={16} fill="currentColor" />
+                  ) : (
+                    <Pause size={16} fill="currentColor" />
+                  )}
+                  <span>{isMuted ? "Play" : "Pause"}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Progress Bar */}
         <div
