@@ -1,8 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import SceneViewer from '../components/SceneViewer';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette, Share2, Bookmark } from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import SplatViewer from "../components/SplatViewer";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Home as HomeIcon,
+  X,
+  Maximize2,
+  Volume2,
+  VolumeX,
+  Loader2,
+  Play,
+  Pause,
+  Palette,
+  Share2,
+  Bookmark,
+} from "lucide-react";
 
 export default function Journey() {
   const { id } = useParams();
@@ -27,25 +41,26 @@ export default function Journey() {
           id: record.id,
           title: record.title,
           text: record.description || "No description available.",
-          visualFocus: 'default',
+          visualFocus: "default",
           img_url: record.image_url, // Direct R2 URL
-          date: record.created_at ? new Date(record.created_at).toLocaleDateString() : "Unknown Date",
+          date: record.created_at
+            ? new Date(record.created_at).toLocaleDateString()
+            : "Unknown Date",
           audio_url: record.audio_url,
           splat_url: record.splat_url,
           colorized_url: null,
-          isColorMode: false
+          isColorMode: false,
         }));
 
         console.log(`Fetched ${mappedChapters.length} chapters.`);
         setChapters(mappedChapters);
 
         // Polling Logic: If less than 5 records (assuming 5 is target), convert to poll
-        // But for generic usage, maybe just stop if we verify all done? 
+        // But for generic usage, maybe just stop if we verify all done?
         // For now, simpler: Poll if we have 0 records, or verify some "status" field if we had one.
-        // Let's assume user searches for 5 items. If < 5, keep polling? 
+        // Let's assume user searches for 5 items. If < 5, keep polling?
         // Or cleaner: Poll every 3 seconds for the first 30 seconds?
         // Let's implement active polling if mappedChapters < 5 (our limit) && loop count < max
-
       } catch (err) {
         console.error("Failed to load journal:", err);
         setError(err.message);
@@ -85,19 +100,23 @@ export default function Journey() {
   // Check if saved on load
   useEffect(() => {
     if (!id) return;
-    const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+    const savedIds = JSON.parse(
+      localStorage.getItem("savedJournalIds") || "[]",
+    );
     setIsSaved(savedIds.includes(id));
   }, [id]);
 
   const handleSave = () => {
-    const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+    const savedIds = JSON.parse(
+      localStorage.getItem("savedJournalIds") || "[]",
+    );
     let newIds;
     if (isSaved) {
-      newIds = savedIds.filter(sid => sid !== id);
+      newIds = savedIds.filter((sid) => sid !== id);
     } else {
       newIds = [...savedIds, id];
     }
-    localStorage.setItem('savedJournalIds', JSON.stringify(newIds));
+    localStorage.setItem("savedJournalIds", JSON.stringify(newIds));
     setIsSaved(!isSaved);
   };
 
@@ -127,13 +146,15 @@ export default function Journey() {
 
   const updateProgress = () => {
     if (audioRef.current && audioRef.current.duration) {
-      setAudioProgress(audioRef.current.currentTime / audioRef.current.duration);
+      setAudioProgress(
+        audioRef.current.currentTime / audioRef.current.duration,
+      );
     }
   };
 
   const playAudio = (url) => {
     if (!url || !audioRef.current) return;
-    const fullUrl = url.startsWith('http') ? url : url;
+    const fullUrl = url.startsWith("http") ? url : url;
 
     if (!audioRef.current.src.includes(url)) {
       audioRef.current.src = fullUrl;
@@ -145,7 +166,7 @@ export default function Journey() {
       if (playPromise !== undefined) {
         playPromise
           .then(() => setIsPlaying(true))
-          .catch(e => console.error("Audio Play Error:", e));
+          .catch((e) => console.error("Audio Play Error:", e));
       }
     }
   };
@@ -154,8 +175,8 @@ export default function Journey() {
     const audio = new Audio();
     audioRef.current = audio;
 
-    audio.addEventListener('timeupdate', updateProgress);
-    audio.addEventListener('ended', onEnd);
+    audio.addEventListener("timeupdate", updateProgress);
+    audio.addEventListener("ended", onEnd);
 
     return () => {
       audio.removeEventListener("timeupdate", updateProgress);
@@ -180,15 +201,14 @@ export default function Journey() {
           .substring(0, 30);
         const stableId = `${safeTitle}_${currentChapter.date ? currentChapter.date.replace(/[^a-zA-Z0-9]/g, "") : "nodate"}`;
 
-
-        const response = await fetch('/api/generate-audio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/generate-audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: currentChapter.text,
             id: stableId,
-            recordId: currentChapter.id // Pass DB ID for updating
-          })
+            recordId: currentChapter.id, // Pass DB ID for updating
+          }),
         });
 
         if (!response.ok) return;
@@ -216,8 +236,6 @@ export default function Journey() {
     fetchAudioIfNeeded();
   }, [currentChapterIndex, currentChapter?.text]);
 
-
-
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentChapter) return;
@@ -236,7 +254,7 @@ export default function Journey() {
             if (playPromise !== undefined) {
               playPromise
                 .then(() => setIsPlaying(true))
-                .catch(e => console.error("Audio Play Error:", e));
+                .catch((e) => console.error("Audio Play Error:", e));
             }
           }
         }
@@ -250,11 +268,26 @@ export default function Journey() {
 
   if (isLoading || (chapters.length === 0 && !error)) {
     return (
-      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+      <div
+        className="full-screen"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+        }}
+      >
         <Loader2 size={48} className="spinner" />
-        <p style={{ marginTop: '16px' }}>{chapters.length === 0 ? "Searching Archives & Restoring Memories..." : "Loading Journey..."}</p>
+        <p style={{ marginTop: "16px" }}>
+          {chapters.length === 0
+            ? "Searching Archives & Restoring Memories..."
+            : "Loading Journey..."}
+        </p>
         {chapters.length === 0 && (
-          <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '8px' }}>This may take a few moments.</p>
+          <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "8px" }}>
+            This may take a few moments.
+          </p>
         )}
       </div>
     );
@@ -262,12 +295,26 @@ export default function Journey() {
 
   if (error) {
     return (
-      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+      <div
+        className="full-screen"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+        }}
+      >
         <p>{error || "No journey data found."}</p>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate("/")}
           className="glass-panel"
-          style={{ marginTop: '20px', padding: '12px 24px', cursor: 'pointer', color: 'white' }}
+          style={{
+            marginTop: "20px",
+            padding: "12px 24px",
+            cursor: "pointer",
+            color: "white",
+          }}
         >
           Return to Home
         </button>
@@ -277,25 +324,21 @@ export default function Journey() {
 
   const nextChapter = () => {
     if (currentChapterIndex < chapters.length - 1) {
-      setCurrentChapterIndex(prev => prev + 1);
+      setCurrentChapterIndex((prev) => prev + 1);
       setAudioProgress(0);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
   const prevChapter = () => {
     if (currentChapterIndex > 0) {
-      setCurrentChapterIndex(prev => prev - 1);
+      setCurrentChapterIndex((prev) => prev - 1);
       setAudioProgress(0);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
-
-
   /* --- Audio Logic End --- */
-
-
 
   return (
     <div
@@ -307,7 +350,44 @@ export default function Journey() {
         overflow: "auto",
       }}
     >
-      <SceneViewer visualFocus={currentChapter.visualFocus} splatUrl={currentChapter.splat_url} />
+      {/* 3D Splat Background */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          zIndex: 1,
+        }}
+      >
+        {currentChapter.splat_url ? (
+          <SplatViewer url={currentChapter.splat_url} />
+        ) : (
+          // Placeholder: Show 2D image until splat loads
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              overflow: "hidden",
+              background: "#000",
+            }}
+          >
+            {currentChapter.img_url && (
+              <img
+                src={currentChapter.img_url}
+                alt="Loading 3D..."
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  filter: "blur(8px) brightness(0.5)",
+                }}
+              />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Header: Title & Controls */}
       <div
@@ -320,20 +400,58 @@ export default function Journey() {
         }}
       >
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-          <button onClick={() => navigate('/')} className="glass-panel" style={{ padding: '12px', color: 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "40px",
+          }}
+        >
+          <button
+            onClick={() => navigate("/")}
+            className="glass-panel"
+            style={{
+              padding: "12px",
+              color: "white",
+              display: "flex",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
             <HomeIcon size={20} /> <span className="mobile-hide">Home</span>
           </button>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: "flex", gap: "10px" }}>
             {/* Share Button */}
-            <button onClick={handleShare} className="glass-panel" style={{ padding: '12px', color: 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={handleShare}
+              className="glass-panel"
+              style={{
+                padding: "12px",
+                color: "white",
+                display: "flex",
+                gap: "8px",
+                alignItems: "center",
+              }}
+            >
               <Share2 size={20} /> <span className="mobile-hide">Share</span>
             </button>
 
             {/* Save Button (Only if NOT user created, or always? User requested save for searched journals. Let's allowing saving everything for simplicity, acting as a bookmark) */}
-            <button onClick={handleSave} className="glass-panel" style={{ padding: '12px', color: isSaved ? '#00c8ff' : 'white', display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <Bookmark size={20} fill={isSaved ? "#00c8ff" : "none"} /> <span className="mobile-hide">{isSaved ? 'Saved' : 'Save'}</span>
+            <button
+              onClick={handleSave}
+              className="glass-panel"
+              style={{
+                padding: "12px",
+                color: isSaved ? "#00c8ff" : "white",
+                display: "flex",
+                gap: "8px",
+                alignItems: "center",
+              }}
+            >
+              <Bookmark size={20} fill={isSaved ? "#00c8ff" : "none"} />{" "}
+              <span className="mobile-hide">{isSaved ? "Saved" : "Save"}</span>
             </button>
           </div>
         </div>
@@ -389,8 +507,6 @@ export default function Journey() {
             alignItems: "center",
           }}
         >
-
-
           {/* Audio Controls */}
           {isAudioProcessing ? (
             <div
@@ -535,8 +651,20 @@ export default function Journey() {
             <>
               {currentChapter.isColorMode && currentChapter.colorized_url ? (
                 <ReactCompareSlider
-                  itemOne={<ReactCompareSliderImage src={currentChapter.img_url} alt="Original" style={{ objectFit: "contain", background: "#000" }} />}
-                  itemTwo={<ReactCompareSliderImage src={currentChapter.colorized_url} alt="Colorized" style={{ objectFit: "contain", background: "#000" }} />}
+                  itemOne={
+                    <ReactCompareSliderImage
+                      src={currentChapter.img_url}
+                      alt="Original"
+                      style={{ objectFit: "contain", background: "#000" }}
+                    />
+                  }
+                  itemTwo={
+                    <ReactCompareSliderImage
+                      src={currentChapter.colorized_url}
+                      alt="Colorized"
+                      style={{ objectFit: "contain", background: "#000" }}
+                    />
+                  }
                   style={{ width: "100%", height: "100%", background: "#000" }}
                 />
               ) : (
@@ -688,8 +816,6 @@ export default function Journey() {
           marginTop: "-20px",
         }}
       >
-
-
         <motion.div
           key={currentChapter.text}
           initial={{ opacity: 0, y: 10 }}
