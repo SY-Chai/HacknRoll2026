@@ -4,11 +4,15 @@ import * as cheerio from 'cheerio';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+
+// In-memory lock to avoid concurrent requests for same text
+const pendingAudio = new Map();
 
 // Exa Search API
 async function searchExa(query) {
@@ -136,65 +140,98 @@ export async function generateAudio(text, itemId) {
   const ttsModel = "gemini-2.5-flash-preview-tts";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
-  const payload = {
-    contents: [{
-      parts: [{ text: text }]
-    }],
-    generationConfig: {
-      responseModalities: ["AUDIO"],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: "Fenrir" // Formal voice
+  // Use hashing for caching
+  const textHash = crypto.createHash('md5').update(text).digest('hex');
+  const filename = `audio_cache_${textHash}.wav`;
+  const tmpDir = path.join(process.cwd(), 'tmp');
+  const filePath = path.join(tmpDir, filename);
+
+  // Check if cached file exists
+  if (fs.existsSync(filePath)) {
+    console.log(`Using cached audio: ${filename}`);
+    return filename;
+  }
+
+  // Prevent concurrent duplicate requests
+  if (pendingAudio.has(textHash)) {
+    console.log(`Waiting for existing generation for hash: ${textHash}`);
+    return pendingAudio.get(textHash);
+  }
+
+  const generationTask = (async () => {
+    const payload = {
+      contents: [{
+        parts: [{ text: text }]
+      }],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: "Fenrir" // Formal voice
+            }
           }
         }
       }
-    }
-  };
+    };
 
-  try {
-    console.log(`Generating audio using ${ttsModel} (Voice: Fenrir)...`);
-    const response = await axios.post(url, payload, { timeout: 15000 }); // 15s timeout
-
-    if (response.data.candidates && response.data.candidates[0].content.parts[0].inlineData) {
-      const inlineData = response.data.candidates[0].content.parts[0].inlineData;
-      const audioData = inlineData.data;
-      const rawBuffer = Buffer.from(audioData, 'base64');
-
-      // Determine sample rate from mimeType if possible, otherwise default 24000
-      // Expected: audio/L16;codec=pcm;rate=24000
-      let sampleRate = 24000;
-      if (inlineData.mimeType && inlineData.mimeType.includes('rate=')) {
-        try {
-          const match = inlineData.mimeType.match(/rate=(\d+)/);
-          if (match && match[1]) sampleRate = parseInt(match[1]);
-        } catch (e) {
-          console.log("Could not parse rate, default to 24000");
+    try {
+      console.log(`Generating audio for: "${text.substring(0, 30)}..." using ${ttsModel}...`);
+      let response;
+      try {
+        // Increase timeout to 60s as audio generation can be slow
+        response = await axios.post(url, payload, { timeout: 60000 });
+      } catch (err) {
+        if (err.response && err.response.status === 429) {
+          console.warn("Quota reached (429). Retrying in 12s...");
+          await new Promise(resolve => setTimeout(resolve, 12000));
+          response = await axios.post(url, payload, { timeout: 60000 });
+        } else {
+          throw err;
         }
       }
 
-      const wavHeader = createWavHeader(rawBuffer.length, sampleRate);
-      const finalBuffer = Buffer.concat([wavHeader, rawBuffer]);
+      if (response.data.candidates && response.data.candidates[0].content.parts[0].inlineData) {
+        const inlineData = response.data.candidates[0].content.parts[0].inlineData;
+        const audioData = inlineData.data;
+        const rawBuffer = Buffer.from(audioData, 'base64');
 
-      const filename = `audio_${itemId}_${Date.now()}.wav`; // Correct extension .wav
-      const tmpDir = path.join(process.cwd(), 'tmp');
-      if (!fs.existsSync(tmpDir)) {
-        fs.mkdirSync(tmpDir);
+        let sampleRate = 24000;
+        if (inlineData.mimeType && inlineData.mimeType.includes('rate=')) {
+          try {
+            const match = inlineData.mimeType.match(/rate=(\d+)/);
+            if (match && match[1]) sampleRate = parseInt(match[1]);
+          } catch (e) { }
+        }
+
+        const wavHeader = createWavHeader(rawBuffer.length, sampleRate);
+        const finalBuffer = Buffer.concat([wavHeader, rawBuffer]);
+
+        if (!fs.existsSync(tmpDir)) {
+          fs.mkdirSync(tmpDir, { recursive: true });
+        }
+
+        fs.writeFileSync(filePath, finalBuffer);
+        console.log(`Audio saved to cache: ${filePath}`);
+        return filename;
+      } else {
+        throw new Error("No audio data in response");
       }
-      const filePath = path.join(tmpDir, filename);
-
-      fs.writeFileSync(filePath, finalBuffer);
-      console.log(`Audio saved to: ${filePath}`);
-      return filename;
-    } else {
-      console.error("No audio data in response");
+    } catch (error) {
+      console.error("Audio generation failed:", error.message);
+      if (error.response) {
+        console.error("Error Details:", JSON.stringify(error.response.data));
+      }
       return null;
     }
-  } catch (error) {
-    console.error("Audio generation failed:", error.message);
-    if (error.response) {
-      console.error("Error Details:", error.response.data);
-    }
-    return null;
+  })();
+
+  pendingAudio.set(textHash, generationTask);
+  try {
+    return await generationTask;
+  } finally {
+    // Basic cleanup: remove from pending map once done (success or fail)
+    // We only keep it for a short window to prevent immediate thundering herd
+    setTimeout(() => pendingAudio.delete(textHash), 2000);
   }
 }

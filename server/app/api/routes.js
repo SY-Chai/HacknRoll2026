@@ -13,13 +13,20 @@ router.get('/proxy-image', async (req, res) => {
       return res.status(400).send("Missing url parameter");
     }
 
+    // Add User-Agent to avoid being blocked by NAS/External servers
     const response = await axios({
       url,
       method: 'GET',
-      responseType: 'stream'
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.nas.gov.sg/'
+      },
+      timeout: 10000
     });
 
     res.set('Content-Type', response.headers['content-type']);
+    res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
     response.data.pipe(res);
   } catch (error) {
     console.error("Proxy Image Error:", error.message);

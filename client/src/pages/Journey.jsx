@@ -127,9 +127,10 @@ export default function Journey() {
     useEffect(() => {
         if (!currentChapter) return;
 
+        const capturedIndex = currentChapterIndex;
         const fetchAudioIfNeeded = async () => {
             // If audio already exists, do nothing
-            if (currentChapter.audio_url) return;
+            if (chapters[capturedIndex].audio_url) return;
 
             // Start Processing
             setIsAudioProcessing(true);
@@ -153,13 +154,15 @@ export default function Journey() {
 
                 const data = await response.json();
                 if (data.success && data.audioUrl) {
-                    // Update state with new audio URL
+                    // Update state with new audio URL using the captured index
                     setChapters(prevChapters => {
                         const newChapters = [...prevChapters];
-                        newChapters[currentChapterIndex] = {
-                            ...newChapters[currentChapterIndex],
-                            audio_url: data.audioUrl
-                        };
+                        if (newChapters[capturedIndex]) {
+                            newChapters[capturedIndex] = {
+                                ...newChapters[capturedIndex],
+                                audio_url: data.audioUrl
+                            };
+                        }
                         return newChapters;
                     });
                 }
@@ -213,6 +216,7 @@ export default function Journey() {
     const nextChapter = () => {
         if (currentChapterIndex < chapters.length - 1) {
             setCurrentChapterIndex(prev => prev + 1);
+            setAudioProgress(0);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
@@ -220,27 +224,46 @@ export default function Journey() {
     const prevChapter = () => {
         if (currentChapterIndex > 0) {
             setCurrentChapterIndex(prev => prev - 1);
+            setAudioProgress(0);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
 
     return (
-        <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'auto' }}>
             <SceneViewer visualFocus={currentChapter.visualFocus} />
 
             {/* Header: Title & Controls */}
-            <div style={{ padding: '24px', zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <button onClick={() => navigate('/')} className="glass-panel" style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
-                    <HomeIcon size={20} />
-                    <span>Back</span>
-                </button>
-                <div className="glass-panel" style={{ padding: '12px 24px' }}>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+            <div style={{ padding: '12px 24px', zIndex: 10, display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start' }}>
+                    <button onClick={() => navigate('/')} className="glass-panel" style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
+                        <HomeIcon size={20} />
+                        <span>Back</span>
+                    </button>
+                </div>
+
+                <div className="glass-panel" style={{
+                    padding: '12px 32px',
+                    position: 'absolute',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    maxWidth: '50%',
+                    textAlign: 'center'
+                }}>
+                    <h1 style={{
+                        fontSize: '1.25rem',
+                        fontWeight: 700,
+                        margin: 0,
+                        textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                    }}>
                         {currentChapter.title}
                     </h1>
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
                     {/* Audio Controls */}
                     {isAudioProcessing ? (
                         <div className="glass-panel" style={{ padding: '12px', color: 'var(--text-muted)', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -267,7 +290,7 @@ export default function Journey() {
                         >
                             {isMuted ? <Play size={20} fill="currentColor" /> : <Pause size={20} fill="currentColor" />}
                             <span style={{ fontWeight: 600 }}>
-                                {isMuted ? 'Play Narration' : 'Pause Narration'}
+                                {isMuted ? 'Play' : 'Pause'}
                             </span>
                         </button>
                     )}
@@ -300,7 +323,7 @@ export default function Journey() {
                             <img
                                 src={chapters[currentChapterIndex - 1].img_url}
                                 alt="Previous"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                             />
                         </motion.div>
                     )}
@@ -328,7 +351,7 @@ export default function Journey() {
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     onClick={() => currentChapter.img_url && setIsLightboxOpen(true)}
                     style={{
-                        height: '70%',
+                        height: '65%',
                         aspectRatio: '4/3',
                         borderRadius: '16px',
                         overflow: 'hidden',
@@ -345,7 +368,7 @@ export default function Journey() {
                             <img
                                 src={currentChapter.img_url}
                                 alt={currentChapter.title}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                             />
                             {/* Hover hint */}
                             <div className="hover-hint" style={{
@@ -404,7 +427,7 @@ export default function Journey() {
                             <img
                                 src={chapters[currentChapterIndex + 1].img_url}
                                 alt="Next"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
                             />
                         </motion.div>
                     )}
@@ -412,18 +435,29 @@ export default function Journey() {
 
             </div>
 
-            {/* Footer: Description */}
             <div style={{
-                padding: '24px 48px',
+                padding: '0 48px 20px',
                 zIndex: 10,
                 textAlign: 'center',
                 background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)',
-                maxHeight: '35vh',
+                maxHeight: '40vh',
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'flex-end',
-                flexShrink: 0
+                justifyContent: 'center', // Changed from flex-end
+                flexShrink: 0,
+                marginTop: '-20px' // Pull slightly upwards
             }}>
+                {/* Date Display: Below Image, Above Description */}
+                <div style={{
+                    fontSize: '0.9rem',
+                    color: 'rgba(255,255,255,0.6)',
+                    marginBottom: '4px',
+                    fontWeight: 500,
+                    letterSpacing: '1px'
+                }}>
+                    {currentChapter.date}
+                </div>
+
                 <motion.div
                     key={currentChapter.text}
                     initial={{ opacity: 0, y: 10 }}
@@ -446,9 +480,6 @@ export default function Journey() {
 
                 {/* Meta Info & Audio Progress */}
                 <div style={{ marginTop: '12px', width: '100%', maxWidth: '800px', margin: '12px auto 0' }}>
-                    <div style={{ fontSize: '0.9rem', color: '#888', marginBottom: '8px' }}>
-                        {currentChapter.date}
-                    </div>
 
                     {/* Audio Progress Bar */}
                     <div style={{
@@ -523,6 +554,7 @@ export default function Journey() {
                             style={{
                                 maxWidth: '100%',
                                 maxHeight: '100%',
+                                objectFit: 'contain',
                                 borderRadius: '4px',
                                 boxShadow: '0 0 50px rgba(0,0,0,0.5)',
                                 cursor: 'default'
