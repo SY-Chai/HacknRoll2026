@@ -271,7 +271,7 @@ export async function processAndEnhanceImage(imageInput) {
         {
           parts: [
             {
-              text: "Upscale this image to 4K resolution. If the image is black and white, colorize it realistically. If it is already colored, enhance the quality and details. Output ONLY the processed image.",
+              text: "Upscale this image to 1080p resolution. If the image is black and white, colorize it realistically. If it is already colored, enhance the quality and details. Output ONLY the processed image.",
             },
             { inlineData: { mimeType: "image/jpeg", data: base64Image } },
           ],

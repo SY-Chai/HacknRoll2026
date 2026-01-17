@@ -28,7 +28,7 @@ export default function Journey() {
           title: record.title,
           text: record.description || "No description available.",
           visualFocus: 'default',
-          img_url: record.image_url ? `/api/proxy-image?url=${encodeURIComponent(record.image_url)}` : null,
+          img_url: record.image_url, // Direct R2 URL
           date: record.created_at ? new Date(record.created_at).toLocaleDateString() : "Unknown Date",
           audio_url: record.audio_url,
           splat_url: record.splat_url,
