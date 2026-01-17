@@ -133,7 +133,7 @@ function createWavHeader(dataLength, sampleRate = 24000, numChannels = 1, bitsPe
 // Generate Audio using Gemini TTS
 export async function generateAudio(text, itemId) {
   // Use a known valid model supporting Audio generation
-  const ttsModel = "gemini-2.0-flash-exp";
+  const ttsModel = "gemini-2.5-flash-preview-tts";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
   const payload = {
