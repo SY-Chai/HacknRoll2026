@@ -2,8 +2,8 @@
 
 Deploy Apple's [SHARP](https://github.com/apple/ml-sharp) (Single-image High-fidelity Appearance Reconstruction with Primitives) model as a serverless inference endpoint on RunPod.
 
-**Input**: Single RGB image  
-**Output**: 3D Gaussian Splatting PLY file
+**Input**: Single RGB image or batch of images  
+**Output**: 3D Gaussian Splatting PLY file(s)
 
 ## Quick Start
 
@@ -30,7 +30,7 @@ docker push your-username/sharp-runpod:latest
 
 ## API Usage
 
-### Request Format
+### Single Image Request
 
 ```json
 {
@@ -50,19 +50,72 @@ Or using an image URL:
 }
 ```
 
-### Response Format
+### Single Image Response
 
 ```json
 {
   "status": "success",
-  "ply": "<base64_encoded_ply_file>",
+  "ply_url": "https://your-bucket.r2.dev/job-id.ply",
   "num_gaussians": 589824,
   "image_size": {"width": 1920, "height": 1080},
   "focal_length_px": 1234.56
 }
 ```
 
-### Example: Python Client
+### Batch Request
+
+Process multiple images in a single request:
+
+```json
+{
+  "input": {
+    "images": [
+      {"image": "<base64_encoded_image_1>"},
+      {"image_url": "https://example.com/image2.jpg"},
+      {"image": "<base64_encoded_image_3>"}
+    ]
+  }
+}
+```
+
+### Batch Response
+
+```json
+{
+  "status": "success",
+  "results": [
+    {
+      "status": "success",
+      "ply_url": "https://your-bucket.r2.dev/job-id_0.ply",
+      "num_gaussians": 589824,
+      "image_size": {"width": 1920, "height": 1080},
+      "focal_length_px": 1234.56
+    },
+    {
+      "status": "success",
+      "ply_url": "https://your-bucket.r2.dev/job-id_1.ply",
+      "num_gaussians": 524288,
+      "image_size": {"width": 1280, "height": 720},
+      "focal_length_px": 987.65
+    },
+    {
+      "status": "error",
+      "message": "Failed to decode image"
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "succeeded": 2,
+    "failed": 1
+  }
+}
+```
+
+The batch response status will be:
+- `"success"` if all images processed successfully
+- `"partial"` if some images failed
+
+### Example: Python Client (Single Image)
 
 ```python
 import runpod
@@ -82,12 +135,41 @@ result = endpoint.run_sync({
     }
 })
 
-# Save PLY output
+# Get PLY URL
 if result["status"] == "success":
-    ply_data = base64.b64decode(result["ply"])
-    with open("output.ply", "wb") as f:
-        f.write(ply_data)
+    print(f"PLY URL: {result['ply_url']}")
     print(f"Generated {result['num_gaussians']} Gaussians")
+```
+
+### Example: Python Client (Batch)
+
+```python
+import runpod
+import base64
+
+runpod.api_key = "your-runpod-api-key"
+
+# Load multiple images
+images = []
+for path in ["image1.jpg", "image2.jpg", "image3.jpg"]:
+    with open(path, "rb") as f:
+        images.append({"image": base64.b64encode(f.read()).decode()})
+
+# Run batch inference
+endpoint = runpod.Endpoint("your-endpoint-id")
+result = endpoint.run_sync({
+    "input": {
+        "images": images
+    }
+})
+
+# Process results
+print(f"Summary: {result['summary']}")
+for i, r in enumerate(result["results"]):
+    if r["status"] == "success":
+        print(f"[{i}] PLY URL: {r['ply_url']}, Gaussians: {r['num_gaussians']}")
+    else:
+        print(f"[{i}] Error: {r['message']}")
 ```
 
 ### Example: cURL

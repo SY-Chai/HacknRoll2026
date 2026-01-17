@@ -2,10 +2,10 @@
 RunPod Serverless Handler for Apple SHARP 3DGS Model
 
 SHARP: Single-image High-fidelity Appearance Reconstruction with Primitives
-Converts a single image into a 3D Gaussian Splatting representation.
+Converts images into 3D Gaussian Splatting representations.
 
-Input: Single image (base64 or URL)
-Output: PLY file uploaded to S3/R2, returns URL
+Input: Single image or batch of images (base64 or URL)
+Output: PLY file(s) uploaded to S3/R2, returns URL(s)
 """
 
 import base64
@@ -209,11 +209,98 @@ def predict_gaussians(predictor, image: np.ndarray, f_px: float, device: torch.d
     return gaussians, (height, width)
 
 
+def process_single_image(
+    predictor,
+    device,
+    temp_dir: Path,
+    image_input: dict,
+    index: int,
+    job_id: str,
+) -> dict:
+    """
+    Process a single image and return the result.
+
+    Args:
+        predictor: The SHARP model
+        device: Torch device
+        temp_dir: Temporary directory for file operations
+        image_input: Dict with 'image' (base64) or 'image_url'
+        index: Index of the image in the batch
+        job_id: Job ID for naming the output file
+
+    Returns:
+        Result dict with status, ply_url, etc.
+    """
+    try:
+        input_image_path = temp_dir / f"input_{index}.png"
+
+        # Get input image
+        if image_input.get("image"):
+            LOGGER.info(f"[{index}] Decoding base64 image...")
+            decode_base64_image(image_input["image"], input_image_path)
+        elif image_input.get("image_url"):
+            LOGGER.info(
+                f"[{index}] Downloading image from {image_input['image_url']}..."
+            )
+            download_image(image_input["image_url"], input_image_path)
+        else:
+            return {
+                "status": "error",
+                "message": "Either 'image' (base64) or 'image_url' must be provided",
+            }
+
+        # Load image using SHARP's IO utilities
+        LOGGER.info(f"[{index}] Loading image from {input_image_path}...")
+        image, _, f_px = sharp_io.load_rgb(input_image_path)
+        height, width = image.shape[:2]
+
+        LOGGER.info(
+            f"[{index}] Image size: {width}x{height}, focal length: {f_px:.2f}px"
+        )
+
+        # Run inference
+        gaussians, image_shape = predict_gaussians(predictor, image, f_px, device)
+
+        # Save PLY
+        output_ply_path = temp_dir / f"output_{index}.ply"
+        LOGGER.info(f"[{index}] Saving PLY to {output_ply_path}...")
+        save_ply(gaussians, f_px, image_shape, output_ply_path)
+
+        # Count gaussians
+        num_gaussians = gaussians.mean_vectors.shape[1]
+        LOGGER.info(f"[{index}] Generated {num_gaussians} Gaussians")
+
+        # Upload to Cloudflare R2
+        r2_key = f"{job_id}_{index}.ply"
+
+        LOGGER.info(f"[{index}] Uploading PLY to R2: {r2_key}")
+        ply_url = upload_to_r2(output_ply_path, r2_key)
+
+        return {
+            "status": "success",
+            "ply_url": ply_url,
+            "num_gaussians": num_gaussians,
+            "image_size": {"width": width, "height": height},
+            "focal_length_px": f_px,
+        }
+
+    except Exception as e:
+        LOGGER.error(f"[{index}] Error during inference: {e}")
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "message": str(e),
+            "traceback": traceback.format_exc(),
+        }
+
+
 def handler(job):
     """
     RunPod handler function for SHARP 3DGS inference.
 
-    Input format:
+    Supports both single image and batch processing.
+
+    Input format (single image):
     {
         "input": {
             "image": "<base64_encoded_image>",  # Required (or image_url)
@@ -221,29 +308,66 @@ def handler(job):
         }
     }
 
-    Output format (with S3 configured):
+    Input format (batch):
     {
-        "status": "success",
-        "ply_url": "https://your-bucket.s3.amazonaws.com/output.ply",
-        "num_gaussians": <int>
+        "input": {
+            "images": [
+                {"image": "<base64_encoded_image>"},
+                {"image_url": "<url_to_image>"},
+                ...
+            ]
+        }
     }
 
-    Output format (without S3, returns base64):
+    Output format (single image):
     {
         "status": "success",
-        "ply": "<base64_encoded_ply_file>",
-        "num_gaussians": <int>
+        "ply_url": "https://your-bucket.r2.dev/output.ply",
+        "num_gaussians": <int>,
+        "image_size": {"width": <int>, "height": <int>},
+        "focal_length_px": <float>
+    }
+
+    Output format (batch):
+    {
+        "status": "success",
+        "results": [
+            {
+                "status": "success",
+                "ply_url": "https://your-bucket.r2.dev/output_0.ply",
+                "num_gaussians": <int>,
+                "image_size": {"width": <int>, "height": <int>},
+                "focal_length_px": <float>
+            },
+            ...
+        ]
     }
     """
     try:
         job_input = job.get("input", {})
+        job_id = job.get("id", str(uuid.uuid4()))
 
-        # Validate input
-        if not job_input.get("image") and not job_input.get("image_url"):
-            return {
-                "status": "error",
-                "message": "Either 'image' (base64) or 'image_url' must be provided",
-            }
+        # Determine if batch or single mode
+        images_batch = job_input.get("images")
+        is_batch = images_batch is not None
+
+        if is_batch:
+            # Batch mode: process multiple images
+            if not isinstance(images_batch, list) or len(images_batch) == 0:
+                return {
+                    "status": "error",
+                    "message": "'images' must be a non-empty list of image objects",
+                }
+            LOGGER.info(f"Batch mode: processing {len(images_batch)} images")
+        else:
+            # Single mode: wrap in list for unified processing
+            if not job_input.get("image") and not job_input.get("image_url"):
+                return {
+                    "status": "error",
+                    "message": "Either 'image' (base64), 'image_url', or 'images' (batch) must be provided",
+                }
+            images_batch = [job_input]
+            LOGGER.info("Single mode: processing 1 image")
 
         # Load model
         predictor = get_model()
@@ -251,49 +375,33 @@ def handler(job):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir = Path(temp_dir)
-            input_image_path = temp_dir / "input.png"
 
-            # Get input image
-            if job_input.get("image"):
-                LOGGER.info("Decoding base64 image...")
-                decode_base64_image(job_input["image"], input_image_path)
+            results = []
+            for i, image_input in enumerate(images_batch):
+                result = process_single_image(
+                    predictor, device, temp_dir, image_input, i, job_id
+                )
+                results.append(result)
+
+            # Return results
+            if is_batch:
+                # Count successes and failures
+                successes = sum(1 for r in results if r["status"] == "success")
+                failures = len(results) - successes
+                LOGGER.info(f"Batch complete: {successes} succeeded, {failures} failed")
+
+                return {
+                    "status": "success" if failures == 0 else "partial",
+                    "results": results,
+                    "summary": {
+                        "total": len(results),
+                        "succeeded": successes,
+                        "failed": failures,
+                    },
+                }
             else:
-                LOGGER.info(f"Downloading image from {job_input['image_url']}...")
-                download_image(job_input["image_url"], input_image_path)
-
-            # Load image using SHARP's IO utilities
-            LOGGER.info(f"Loading image from {input_image_path}...")
-            image, _, f_px = sharp_io.load_rgb(input_image_path)
-            height, width = image.shape[:2]
-
-            LOGGER.info(f"Image size: {width}x{height}, focal length: {f_px:.2f}px")
-
-            # Run inference
-            gaussians, image_shape = predict_gaussians(predictor, image, f_px, device)
-
-            # Save PLY
-            output_ply_path = temp_dir / "output.ply"
-            LOGGER.info(f"Saving PLY to {output_ply_path}...")
-            save_ply(gaussians, f_px, image_shape, output_ply_path)
-
-            # Count gaussians
-            num_gaussians = gaussians.mean_vectors.shape[1]
-            LOGGER.info(f"Generated {num_gaussians} Gaussians")
-
-            # Upload to Cloudflare R2
-            job_id = job.get("id", str(uuid.uuid4()))
-            r2_key = f"{job_id}.ply"
-
-            LOGGER.info(f"Uploading PLY to R2: {r2_key}")
-            ply_url = upload_to_r2(output_ply_path, r2_key)
-
-            return {
-                "status": "success",
-                "ply_url": ply_url,
-                "num_gaussians": num_gaussians,
-                "image_size": {"width": width, "height": height},
-                "focal_length_px": f_px,
-            }
+                # Single mode: return the single result directly
+                return results[0]
 
     except Exception as e:
         LOGGER.error(f"Error during inference: {e}")
