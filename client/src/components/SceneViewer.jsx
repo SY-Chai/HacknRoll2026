@@ -12,6 +12,8 @@ function PlaceholderModel({ type }) {
         }
     });
 
+    if (type === 'default') return null;
+
     let color = "#ffffff";
     let geometry = <boxGeometry args={[2, 2, 2]} />;
 
@@ -26,7 +28,14 @@ function PlaceholderModel({ type }) {
         geometry = <dodecahedronGeometry args={[1.5]} />;
     } else if (type === 'boat_quay') {
         color = "#3a86ff";
-        geometry = <boatGeometry args={[1]} />; // sticking to basic shapes fallback
+        // Fixed: boatGeometry does not exist
+        geometry = <boxGeometry args={[3, 0.8, 1.2]} />;
+    } else if (type === 'shophouse_street') {
+        color = "#e63946";
+        geometry = <boxGeometry args={[1, 3, 1]} />;
+    } else if (type === 'green_field') {
+        color = "#2a9d8f";
+        geometry = <planeGeometry args={[10, 10]} />;
     }
 
     return (
