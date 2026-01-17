@@ -6,7 +6,13 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Resolve to root .env (agent is in server/app/agent/researchAgent.js)
+const envPath = path.resolve(__dirname, '../../../.env');
+dotenv.config({ path: envPath });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
@@ -204,7 +210,7 @@ export async function generateAudio(text, itemId) {
         try {
           const errorMsg = Buffer.from(error.response.data).toString();
           console.error("Error Details:", errorMsg);
-        } catch (e) {}
+        } catch (e) { }
       }
       return null;
     }
@@ -280,10 +286,6 @@ export async function colorizeImage(imageUrl) {
     } else {
       throw new Error("No image data in response");
     }
-
-    fs.writeFileSync(filePath, Buffer.from(response.data));
-    console.log(`Audio saved to: ${filePath}`);
-    return filename;
   } catch (error) {
     console.error("Colorization failed:", error.message);
     return null;

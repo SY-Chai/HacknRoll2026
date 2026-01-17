@@ -1,9 +1,13 @@
 import express from 'express';
 import axios from 'axios';
+import multer from 'multer';
 import { searchPhotographs } from '../scraper/nasScraper.js';
 import { enhanceDescription, generateAudio, colorizeImage } from '../agent/researchAgent.js';
+import { supabase } from '../utils/supabase.js';
+import { uploadToR2 } from '../utils/r2.js';
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Image Proxy
 router.get('/proxy-image', async (req, res) => {
@@ -34,7 +38,7 @@ router.get('/proxy-image', async (req, res) => {
   }
 });
 
-// Original Search Endpoint (Kept for backward compatibility/debugging)
+// Original Search Endpoint (Using capitalized 'Record' table)
 router.get('/search', async (req, res) => {
   try {
     const { q, start, end, limit } = req.query;
@@ -43,28 +47,35 @@ router.get('/search', async (req, res) => {
       return res.status(400).json({ error: 'Query parameter "q" (keywords) is required.' });
     }
 
-    // Default dates if not provided (optional)
-    const startDate = start;
-    const endDate = end;
-    const resultLimit = limit ? parseInt(limit) : 5; // Default to 5 as requested
+    const resultLimit = limit ? parseInt(limit) : 5;
 
-    console.log(`Received search request: q=${q}, start=${startDate}, end=${endDate}, limit=${resultLimit}`);
+    console.log(`Received search request: q=${q}, start=${start}, end=${end}, limit=${resultLimit}`);
 
-    // 1. Scrape basic results
-    const results = await searchPhotographs(q, startDate, endDate, resultLimit);
+    const results = await searchPhotographs(q, start, end, resultLimit);
 
-    // 2. Enhance with AI descriptions
     console.log('Enhancing results with AI...');
-    const enhancedResults = await Promise.all(results.map(async (item, index) => {
+    const enhancedResults = await Promise.all(results.map(async (item) => {
       const description = await enhanceDescription(item.title, item.date);
-      // Lazy Load: Do NOT generate audio here.
-
       return {
         ...item,
         description,
-        audio: null // Client will fetch this later
+        audio: null
       };
     }));
+
+    // Persist to 'Record' table (Confirmed as Capitalized with correct columns)
+    const recordsToInsert = enhancedResults.map((item) => ({
+      title: item.title,
+      description: item.description,
+      image_url: item.imageUrl,
+      // audio_url: item.audio
+    }));
+
+    const { error: recordsError } = await supabase
+      .from('Record')
+      .insert(recordsToInsert);
+
+    if (recordsError) console.error('Failed to save records:', recordsError);
 
     res.json({
       success: true,
@@ -82,6 +93,99 @@ router.get('/search', async (req, res) => {
   }
 });
 
+// New Endpoint: Create Memory (Using JSON storage in 'Journal.query' to bypass missing columns)
+router.post('/memories', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'audio', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { title, description } = req.body;
+    const files = req.files;
+
+    if (!process.env.R2_IMAGE_BUCKET || !process.env.R2_AUDIO_BUCKET) {
+      console.error('R2 Bucket environment variables are missing');
+      return res.status(500).json({ success: false, error: 'Server configuration error: R2 Buckets not defined' });
+    }
+
+    let imageUrl = null;
+    let audioUrl = null;
+
+    if (files.image) {
+      const file = files.image[0];
+      const filename = `user-img-${Date.now()}-${file.originalname}`;
+      imageUrl = await uploadToR2(file.buffer, filename, file.mimetype, process.env.R2_IMAGE_BUCKET);
+    }
+
+    if (files.audio) {
+      const file = files.audio[0];
+      const filename = `user-audio-${Date.now()}-${file.originalname}`;
+      audioUrl = await uploadToR2(file.buffer, filename, file.mimetype, process.env.R2_AUDIO_BUCKET);
+    }
+
+    // Store ALL metadata as a JSON string in the 'query' column which exists
+    const memoryData = {
+      title: title || 'Untitled Memory',
+      description,
+      image_url: imageUrl,
+      audio_url: audioUrl,
+      user_created: true,
+      timestamp: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from('Journal')
+      .insert([{
+        query: JSON.stringify(memoryData),
+        user_created: true
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Memories upload error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all Journal/Memories (Parse JSON from 'query' column)
+router.get('/memories', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('Journal')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Parse the JSON data from query column
+    const parsedData = data.map(item => {
+      try {
+        const metadata = JSON.parse(item.query);
+        return {
+          id: item.id,
+          created_at: item.created_at,
+          ...metadata
+        };
+      } catch (e) {
+        // Fallback if not JSON
+        return {
+          id: item.id,
+          title: 'Imported Memory',
+          description: item.query,
+          created_at: item.created_at
+        };
+      }
+    });
+
+    res.json({ success: true, data: parsedData });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // New Endpoint: Lazy Generate Audio
 router.post('/generate-audio', async (req, res) => {
   try {
@@ -89,7 +193,6 @@ router.post('/generate-audio', async (req, res) => {
     if (!text) return res.status(400).json({ error: "Text is required" });
 
     console.log(`Generating audio on-demand for ID: ${id}`);
-    // Use a unique ID based on timestamp if valid ID not provided
     const safeId = id || Date.now().toString();
 
     const audioFile = await generateAudio(text, safeId);
@@ -126,4 +229,5 @@ router.post('/colorize-image', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 export default router;
