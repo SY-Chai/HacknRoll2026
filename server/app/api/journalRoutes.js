@@ -228,6 +228,11 @@ router.get("/:id", async (req, res) => {
         console.warn(`[Journal] Invalid ID format for table: ${id}`);
         return res.status(400).json({ error: "Invalid ID format" });
       }
+      // Handle "no rows returned" error
+      if (journalError.code === "PGRST116") {
+        console.warn(`[Journal] Journal not found: ${id}`);
+        return res.status(404).json({ error: "Journal not found" });
+      }
       throw journalError;
     }
 
@@ -248,7 +253,9 @@ router.get("/:id", async (req, res) => {
     });
   } catch (error) {
     console.error("Fetch failed:", error);
-    res.status(404).json({ error: "Journal not found" });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch journal", details: error.message });
   }
 });
 
