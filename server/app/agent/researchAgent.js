@@ -133,15 +133,17 @@ function createWavHeader(dataLength, sampleRate = 24000, numChannels = 1, bitsPe
   return header;
 }
 
-// Generate Audio using Gemini TTS
+// Generate Audio using OpenAI TTS (ChatGPT model)
 export async function generateAudio(text, itemId) {
-  // Use a known valid model supporting Audio generation
-  const ttsModel = "gemini-2.5-flash-preview-tts";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  if (!openaiApiKey) {
+    console.error("Missing OPENAI_API_KEY for TTS");
+    return null;
+  }
 
   // Use hashing for caching
   const textHash = crypto.createHash('md5').update(text).digest('hex');
-  const filename = `audio_cache_${textHash}.wav`;
+  const filename = `audio_cache_${textHash}.mp3`;
   const tmpDir = path.join(process.cwd(), 'tmp');
   const filePath = path.join(tmpDir, filename);
 
@@ -158,68 +160,41 @@ export async function generateAudio(text, itemId) {
   }
 
   const generationTask = (async () => {
-    const payload = {
-      contents: [{
-        parts: [{ text: text }]
-      }],
-      generationConfig: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: "Fenrir" // Formal voice
-            }
-          }
-        }
-      }
-    };
-
     try {
-      console.log(`Generating audio for: "${text.substring(0, 30)}..." using ${ttsModel}...`);
-      let response;
-      try {
-        // Increase timeout to 60s as audio generation can be slow
-        response = await axios.post(url, payload, { timeout: 60000 });
-      } catch (err) {
-        if (err.response && err.response.status === 429) {
-          console.warn("Quota reached (429). Retrying in 12s...");
-          await new Promise(resolve => setTimeout(resolve, 12000));
-          response = await axios.post(url, payload, { timeout: 60000 });
-        } else {
-          throw err;
+      console.log(`Generating audio for: "${text.substring(0, 30)}..." using OpenAI TTS...`);
+
+      const response = await axios.post(
+        "https://api.openai.com/v1/audio/speech",
+        {
+          model: "tts-1",
+          input: text,
+          voice: "alloy", // Can be changed to onyx, nova, etc.
+        },
+        {
+          headers: {
+            "Authorization": `Bearer ${openaiApiKey}`,
+            "Content-Type": "application/json",
+          },
+          responseType: "arraybuffer",
+          timeout: 30000,
         }
+      );
+
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
       }
 
-      if (response.data.candidates && response.data.candidates[0].content.parts[0].inlineData) {
-        const inlineData = response.data.candidates[0].content.parts[0].inlineData;
-        const audioData = inlineData.data;
-        const rawBuffer = Buffer.from(audioData, 'base64');
+      fs.writeFileSync(filePath, Buffer.from(response.data));
+      console.log(`Audio saved to cache: ${filePath}`);
+      return filename;
 
-        let sampleRate = 24000;
-        if (inlineData.mimeType && inlineData.mimeType.includes('rate=')) {
-          try {
-            const match = inlineData.mimeType.match(/rate=(\d+)/);
-            if (match && match[1]) sampleRate = parseInt(match[1]);
-          } catch (e) { }
-        }
-
-        const wavHeader = createWavHeader(rawBuffer.length, sampleRate);
-        const finalBuffer = Buffer.concat([wavHeader, rawBuffer]);
-
-        if (!fs.existsSync(tmpDir)) {
-          fs.mkdirSync(tmpDir, { recursive: true });
-        }
-
-        fs.writeFileSync(filePath, finalBuffer);
-        console.log(`Audio saved to cache: ${filePath}`);
-        return filename;
-      } else {
-        throw new Error("No audio data in response");
-      }
     } catch (error) {
-      console.error("Audio generation failed:", error.message);
-      if (error.response) {
-        console.error("Error Details:", JSON.stringify(error.response.data));
+      console.error("OpenAI Audio generation failed:", error.message);
+      if (error.response && error.response.data) {
+        try {
+          const errorMsg = Buffer.from(error.response.data).toString();
+          console.error("Error Details:", errorMsg);
+        } catch (e) { }
       }
       return null;
     }
@@ -230,7 +205,6 @@ export async function generateAudio(text, itemId) {
     return await generationTask;
   } finally {
     // Basic cleanup: remove from pending map once done (success or fail)
-    // We only keep it for a short window to prevent immediate thundering herd
     setTimeout(() => pendingAudio.delete(textHash), 2000);
   }
 }
