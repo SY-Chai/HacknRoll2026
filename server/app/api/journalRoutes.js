@@ -180,6 +180,7 @@ router.post("/search", async (req, res) => {
         );
 
         // 3. Generate 3D Splats (Fire-and-forget to avoid blocking)
+        // Strategy: Send first image immediately, then batch the rest
         (async () => {
           try {
             // Fetch all records for this journal to get image URLs
@@ -196,53 +197,102 @@ router.post("/search", async (req, res) => {
               return;
             }
 
-            const imageUrls = records
-              .map((r) => r.image_url)
-              .filter((url) => url);
+            // Filter records with valid image URLs
+            const validRecords = records.filter(
+              (r) => r.image_url && r.image_url.startsWith("http"),
+            );
 
-            if (imageUrls.length === 0) {
+            if (validRecords.length === 0) {
               console.warn(
                 `[Journal ${journal.id}] No valid image URLs for 3D generation`,
               );
               return;
             }
 
-            console.log(
-              `[Journal ${journal.id}] Generating 3D splats for ${imageUrls.length} images...`,
-            );
-            const results = await generate3DGaussians(imageUrls);
+            // Helper function to update a record with splat URL
+            const updateRecordWithSplat = async (recordId, plyUrl) => {
+              const { error: updateError } = await supabase
+                .from("Record")
+                .update({ splat_url: plyUrl })
+                .eq("id", recordId);
 
-            if (!results || results.length === 0) {
-              console.warn(
-                `[Journal ${journal.id}] 3D generation returned no results`,
+              if (updateError) {
+                console.error(
+                  `[Journal ${journal.id}] Failed to update record ${recordId} with splat URL:`,
+                  updateError,
+                );
+              } else {
+                console.log(
+                  `[Journal ${journal.id}] Updated record ${recordId} with splat URL: ${plyUrl}`,
+                );
+              }
+            };
+
+            // STEP 1: Generate 3D for first image immediately
+            const firstRecord = validRecords[0];
+            console.log(
+              `[Journal ${journal.id}] Generating 3D splat for first image (priority)...`,
+            );
+
+            const firstResult = await generate3DGaussians([
+              firstRecord.image_url,
+            ]);
+
+            if (firstResult && firstResult[0] && firstResult[0].ply_url) {
+              await updateRecordWithSplat(
+                firstRecord.id,
+                firstResult[0].ply_url,
               );
-              return;
+              console.log(
+                `[Journal ${journal.id}] First image 3D generation complete!`,
+              );
+            } else {
+              console.warn(
+                `[Journal ${journal.id}] First image 3D generation failed or returned no result`,
+              );
             }
 
-            // Update each record with its corresponding splat URL
-            for (let i = 0; i < results.length && i < records.length; i++) {
-              const result = results[i];
-              if (result && result.ply_url) {
-                const recordId = records[i].id;
-                const { error: updateError } = await supabase
-                  .from("Record")
-                  .update({ splat_url: result.ply_url })
-                  .eq("id", recordId);
+            // STEP 2: Generate 3D for remaining images (one by one for reliability)
+            if (validRecords.length > 1) {
+              const remainingRecords = validRecords.slice(1);
 
-                if (updateError) {
+              console.log(
+                `[Journal ${journal.id}] Generating 3D splats for remaining ${remainingRecords.length} images...`,
+              );
+
+              for (let i = 0; i < remainingRecords.length; i++) {
+                const record = remainingRecords[i];
+                console.log(
+                  `[Journal ${journal.id}] Processing image ${i + 2}/${validRecords.length}: ${record.image_url}`,
+                );
+
+                try {
+                  const result = await generate3DGaussians([record.image_url]);
+
+                  if (result && result[0] && result[0].ply_url) {
+                    await updateRecordWithSplat(record.id, result[0].ply_url);
+                    console.log(
+                      `[Journal ${journal.id}] Image ${i + 2} 3D generation complete!`,
+                    );
+                  } else {
+                    console.warn(
+                      `[Journal ${journal.id}] Image ${i + 2} 3D generation failed or returned no result`,
+                    );
+                  }
+                } catch (imgError) {
                   console.error(
-                    `[Journal ${journal.id}] Failed to update record ${recordId} with splat URL:`,
-                    updateError,
-                  );
-                } else {
-                  console.log(
-                    `[Journal ${journal.id}] Updated record ${recordId} with splat URL: ${result.ply_url}`,
+                    `[Journal ${journal.id}] Image ${i + 2} 3D generation error:`,
+                    imgError.message,
                   );
                 }
               }
+
+              console.log(
+                `[Journal ${journal.id}] All remaining images processed!`,
+              );
             }
 
-            console.log(`[Journal ${journal.id}] 3D generation complete!`);
+            console.log(`[Journal ${journal.id}] All 3D generation complete!`);
           } catch (gen3dError) {
             console.error(
               `[Journal ${journal.id}] 3D generation failed:`,

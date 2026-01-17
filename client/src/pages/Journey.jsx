@@ -16,6 +16,8 @@ import {
   Palette,
   Share2,
   Bookmark,
+  Box,
+  Image,
 } from "lucide-react";
 
 export default function Journey() {
@@ -96,6 +98,8 @@ export default function Journey() {
   // UI State
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [show3DView, setShow3DView] = useState(false); // Start with 2D, toggle to 3D when ready
+  const [is3DReady, setIs3DReady] = useState(false); // Track if 3D is available
 
   // Check if saved on load
   useEffect(() => {
@@ -127,6 +131,16 @@ export default function Journey() {
 
   const audioRef = useRef(null);
   const currentChapter = chapters[currentChapterIndex];
+
+  // Track when 3D splat becomes available for current chapter
+  useEffect(() => {
+    if (currentChapter?.splat_url) {
+      setIs3DReady(true);
+    } else {
+      setIs3DReady(false);
+      setShow3DView(false);
+    }
+  }, [currentChapter?.splat_url]);
 
   /* --- Audio Logic Start --- */
 
@@ -350,7 +364,7 @@ export default function Journey() {
         overflow: "auto",
       }}
     >
-      {/* 3D Splat Background */}
+      {/* Background: 3D Splat or 2D Image */}
       <div
         style={{
           position: "fixed",
@@ -361,10 +375,14 @@ export default function Journey() {
           zIndex: 1,
         }}
       >
-        {currentChapter.splat_url ? (
-          <SplatViewer url={currentChapter.splat_url} />
+        {show3DView && currentChapter.splat_url ? (
+          <SplatViewer
+            url={currentChapter.splat_url}
+            fillContainer={true}
+            hideControls={true}
+          />
         ) : (
-          // Placeholder: Show 2D image until splat loads
+          // 2D image background (blurred for ambience when 3D available, normal when not)
           <div
             style={{
               width: "100%",
@@ -376,12 +394,14 @@ export default function Journey() {
             {currentChapter.img_url && (
               <img
                 src={currentChapter.img_url}
-                alt="Loading 3D..."
+                alt="Background"
                 style={{
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
-                  filter: "blur(8px) brightness(0.5)",
+                  filter: currentChapter.splat_url
+                    ? "blur(8px) brightness(0.5)"
+                    : "blur(2px) brightness(0.6)",
                 }}
               />
             )}
@@ -399,62 +419,6 @@ export default function Journey() {
           position: "relative",
         }}
       >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "40px",
-          }}
-        >
-          <button
-            onClick={() => navigate("/")}
-            className="glass-panel"
-            style={{
-              padding: "12px",
-              color: "white",
-              display: "flex",
-              gap: "8px",
-              alignItems: "center",
-            }}
-          >
-            <HomeIcon size={20} /> <span className="mobile-hide">Home</span>
-          </button>
-
-          <div style={{ display: "flex", gap: "10px" }}>
-            {/* Share Button */}
-            <button
-              onClick={handleShare}
-              className="glass-panel"
-              style={{
-                padding: "12px",
-                color: "white",
-                display: "flex",
-                gap: "8px",
-                alignItems: "center",
-              }}
-            >
-              <Share2 size={20} /> <span className="mobile-hide">Share</span>
-            </button>
-
-            {/* Save Button (Only if NOT user created, or always? User requested save for searched journals. Let's allowing saving everything for simplicity, acting as a bookmark) */}
-            <button
-              onClick={handleSave}
-              className="glass-panel"
-              style={{
-                padding: "12px",
-                color: isSaved ? "#00c8ff" : "white",
-                display: "flex",
-                gap: "8px",
-                alignItems: "center",
-              }}
-            >
-              <Bookmark size={20} fill={isSaved ? "#00c8ff" : "none"} />{" "}
-              <span className="mobile-hide">{isSaved ? "Saved" : "Save"}</span>
-            </button>
-          </div>
-        </div>
         <div style={{ flex: 1, display: "flex", justifyContent: "flex-start" }}>
           <button
             onClick={() => navigate("/")}
@@ -507,57 +471,39 @@ export default function Journey() {
             alignItems: "center",
           }}
         >
-          {/* Audio Controls */}
-          {isAudioProcessing ? (
-            <div
-              className="glass-panel"
-              style={{
-                padding: "12px",
-                color: "rgba(255,255,255,0.5)",
-                display: "flex",
-                gap: "8px",
-                alignItems: "center",
-              }}
-            >
-              <Loader2 size={16} className="spinner" />
-              <span style={{ fontSize: "0.8rem" }}>Generating Voice...</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsMuted(!isMuted)}
-              className="glass-panel"
-              disabled={!currentChapter.audio_url}
-              style={{
-                padding: "12px 24px",
-                background: isMuted
-                  ? "rgba(255, 170, 0, 0.2)"
-                  : "rgba(255, 255, 255, 0.1)",
-                border: isMuted
-                  ? "1px solid rgba(255, 170, 0, 0.5)"
-                  : "1px solid rgba(255, 255, 255, 0.1)",
-                color: "white",
-                cursor: currentChapter.audio_url ? "pointer" : "not-allowed",
-                opacity: currentChapter.audio_url ? 1 : 0.5,
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                transition: "all 0.3s ease",
-              }}
-            >
-              {isMuted ? (
-                <Play size={20} fill="currentColor" />
-              ) : (
-                <Pause size={20} fill="currentColor" />
-              )}
-              <span style={{ fontWeight: 600 }}>
-                {isMuted ? "Play" : "Pause"}
-              </span>
-            </button>
-          )}
+          {/* Share Button */}
+          <button
+            onClick={handleShare}
+            className="glass-panel"
+            style={{
+              padding: "12px",
+              color: "white",
+              display: "flex",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
+            <Share2 size={20} />
+          </button>
+
+          {/* Save Button */}
+          <button
+            onClick={handleSave}
+            className="glass-panel"
+            style={{
+              padding: "12px",
+              color: isSaved ? "#00c8ff" : "white",
+              display: "flex",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
+            <Bookmark size={20} fill={isSaved ? "#00c8ff" : "none"} />
+          </button>
         </div>
       </div>
 
-      {/* Main Content: Carousel */}
+      {/* Main Content: Carousel (images hidden when 3D view is active, arrows always visible) */}
       <div
         style={{
           flex: 1,
@@ -566,48 +512,10 @@ export default function Journey() {
           justifyContent: "center",
           position: "relative",
           zIndex: 10,
+          pointerEvents: show3DView ? "none" : "auto",
         }}
       >
-        {/* Previous Image */}
-        <AnimatePresence>
-          {currentChapterIndex > 0 && chapters[currentChapterIndex - 1] && (
-            <motion.div
-              key={`prev-${currentChapterIndex}`}
-              initial={{ opacity: 0, x: -100, scale: 0.8 }}
-              animate={{
-                opacity: 0.4,
-                x: -250,
-                scale: 0.85,
-                filter: "blur(4px)",
-              }}
-              exit={{ opacity: 0, x: -300 }}
-              transition={{ duration: 0.4 }}
-              onClick={prevChapter}
-              style={{
-                position: "absolute",
-                height: "60%",
-                aspectRatio: "4/3",
-                cursor: "pointer",
-                borderRadius: "16px",
-                overflow: "hidden",
-                border: "2px solid rgba(255,255,255,0.2)",
-              }}
-            >
-              <img
-                src={chapters[currentChapterIndex - 1].img_url}
-                alt="Previous"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  background: "#000",
-                }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Left Arrow */}
+        {/* Left Arrow - always visible */}
         <button
           onClick={prevChapter}
           disabled={currentChapterIndex === 0}
@@ -622,125 +530,13 @@ export default function Journey() {
             opacity: currentChapterIndex === 0 ? 0 : 1,
             cursor: "pointer",
             zIndex: 20,
+            pointerEvents: "auto",
           }}
         >
           <ChevronLeft size={32} />
         </button>
 
-        {/* Current Image */}
-        <motion.div
-          key={currentChapter.id}
-          initial={{ opacity: 0, scale: 1 }}
-          animate={{ opacity: 1, scale: 1, filter: "blur(0px)", x: 0 }}
-          transition={{ duration: 0.3 }}
-          onClick={() => currentChapter.img_url && setIsLightboxOpen(true)}
-          style={{
-            height: "65%",
-            aspectRatio: "4/3",
-            borderRadius: "16px",
-            overflow: "hidden",
-            boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
-            border: "4px solid rgba(255,255,255,0.1)",
-            zIndex: 15,
-            background: "#111",
-            cursor: "zoom-in",
-            position: "relative",
-          }}
-        >
-          {currentChapter.img_url ? (
-            <>
-              {currentChapter.isColorMode && currentChapter.colorized_url ? (
-                <ReactCompareSlider
-                  itemOne={
-                    <ReactCompareSliderImage
-                      src={currentChapter.img_url}
-                      alt="Original"
-                      style={{ objectFit: "contain", background: "#000" }}
-                    />
-                  }
-                  itemTwo={
-                    <ReactCompareSliderImage
-                      src={currentChapter.colorized_url}
-                      alt="Colorized"
-                      style={{ objectFit: "contain", background: "#000" }}
-                    />
-                  }
-                  style={{ width: "100%", height: "100%", background: "#000" }}
-                />
-              ) : (
-                <img
-                  src={currentChapter.img_url}
-                  alt={currentChapter.title}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "contain",
-                    background: "#000",
-                    transition: "opacity 0.4s ease",
-                  }}
-                />
-              )}
-
-              {isColorizing && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    background: "rgba(0,0,0,0.4)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    zIndex: 10,
-                  }}
-                >
-                  <Loader2 size={40} className="spinner" color="white" />
-                </div>
-              )}
-
-              <div
-                className="hover-hint"
-                style={{
-                  position: "absolute",
-                  top: 12,
-                  right: 12,
-                  background: "rgba(0,0,0,0.6)",
-                  borderRadius: "50%",
-                  padding: "8px",
-                  opacity: 0,
-                  transition: "opacity 0.2s",
-                  zIndex: 20,
-                }}
-              >
-                <Maximize2 size={20} color="white" />
-              </div>
-            </>
-          ) : (
-            <div
-              style={{
-                width: "100%",
-                height: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "#222",
-              }}
-            >
-              <p style={{ color: "#666" }}>No Image</p>
-            </div>
-          )}
-        </motion.div>
-        <style>{`
-                    .hover-hint { opacity: 0; }
-                    div[style*="cursor: zoom-in"]:hover .hover-hint { opacity: 1 !important; }
-                `}</style>
-
-        {/* Right Arrow */}
+        {/* Right Arrow - always visible */}
         <button
           onClick={nextChapter}
           disabled={currentChapterIndex === chapters.length - 1}
@@ -755,67 +551,226 @@ export default function Journey() {
             opacity: currentChapterIndex === chapters.length - 1 ? 0 : 1,
             cursor: "pointer",
             zIndex: 20,
+            pointerEvents: "auto",
           }}
         >
           <ChevronRight size={32} />
         </button>
 
-        {/* Next Image */}
-        <AnimatePresence>
-          {currentChapterIndex < chapters.length - 1 &&
-            chapters[currentChapterIndex + 1] && (
-              <motion.div
-                key={`next-${currentChapterIndex}`}
-                initial={{ opacity: 0, x: 100, scale: 0.8 }}
-                animate={{
-                  opacity: 0.4,
-                  x: 250,
-                  scale: 0.85,
-                  filter: "blur(4px)",
-                }}
-                exit={{ opacity: 0, x: 300 }}
-                transition={{ duration: 0.4 }}
-                onClick={nextChapter}
-                style={{
-                  position: "absolute",
-                  height: "60%",
-                  aspectRatio: "4/3",
-                  cursor: "pointer",
-                  borderRadius: "16px",
-                  overflow: "hidden",
-                  border: "2px solid rgba(255,255,255,0.2)",
-                }}
-              >
-                <img
-                  src={chapters[currentChapterIndex + 1].img_url}
-                  alt="Next"
+        {/* Images - hidden when 3D view is active */}
+        {!show3DView && (
+          <>
+            {/* Previous Image */}
+            <AnimatePresence>
+              {currentChapterIndex > 0 && chapters[currentChapterIndex - 1] && (
+                <motion.div
+                  key={`prev-${currentChapterIndex}`}
+                  initial={{ opacity: 0, x: -100, scale: 0.8 }}
+                  animate={{
+                    opacity: 0.4,
+                    x: -250,
+                    scale: 0.85,
+                    filter: "blur(4px)",
+                  }}
+                  exit={{ opacity: 0, x: -300 }}
+                  transition={{ duration: 0.4 }}
+                  onClick={prevChapter}
+                  style={{
+                    position: "absolute",
+                    height: "60%",
+                    aspectRatio: "4/3",
+                    cursor: "pointer",
+                    borderRadius: "16px",
+                    overflow: "hidden",
+                    border: "2px solid rgba(255,255,255,0.2)",
+                  }}
+                >
+                  <img
+                    src={chapters[currentChapterIndex - 1].img_url}
+                    alt="Previous"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      background: "#000",
+                    }}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Current Image */}
+            <motion.div
+              key={currentChapter.id}
+              initial={{ opacity: 0, scale: 1 }}
+              animate={{ opacity: 1, scale: 1, filter: "blur(0px)", x: 0 }}
+              transition={{ duration: 0.3 }}
+              onClick={() => currentChapter.img_url && setIsLightboxOpen(true)}
+              style={{
+                height: "65%",
+                aspectRatio: "4/3",
+                borderRadius: "16px",
+                overflow: "hidden",
+                boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+                border: "4px solid rgba(255,255,255,0.1)",
+                zIndex: 15,
+                background: "#111",
+                cursor: "zoom-in",
+                position: "relative",
+              }}
+            >
+              {currentChapter.img_url ? (
+                <>
+                  {currentChapter.isColorMode &&
+                  currentChapter.colorized_url ? (
+                    <ReactCompareSlider
+                      itemOne={
+                        <ReactCompareSliderImage
+                          src={currentChapter.img_url}
+                          alt="Original"
+                          style={{ objectFit: "contain", background: "#000" }}
+                        />
+                      }
+                      itemTwo={
+                        <ReactCompareSliderImage
+                          src={currentChapter.colorized_url}
+                          alt="Colorized"
+                          style={{ objectFit: "contain", background: "#000" }}
+                        />
+                      }
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        background: "#000",
+                      }}
+                    />
+                  ) : (
+                    <img
+                      src={currentChapter.img_url}
+                      alt={currentChapter.title}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        background: "#000",
+                        transition: "opacity 0.4s ease",
+                      }}
+                    />
+                  )}
+
+                  {isColorizing && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: "100%",
+                        background: "rgba(0,0,0,0.4)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 10,
+                      }}
+                    >
+                      <Loader2 size={40} className="spinner" color="white" />
+                    </div>
+                  )}
+
+                  <div
+                    className="hover-hint"
+                    style={{
+                      position: "absolute",
+                      top: 12,
+                      right: 12,
+                      background: "rgba(0,0,0,0.6)",
+                      borderRadius: "50%",
+                      padding: "8px",
+                      opacity: 0,
+                      transition: "opacity 0.2s",
+                      zIndex: 20,
+                    }}
+                  >
+                    <Maximize2 size={20} color="white" />
+                  </div>
+                </>
+              ) : (
+                <div
                   style={{
                     width: "100%",
                     height: "100%",
-                    objectFit: "contain",
-                    background: "#000",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "#222",
                   }}
-                />
-              </motion.div>
-            )}
-        </AnimatePresence>
+                >
+                  <p style={{ color: "#666" }}>No Image</p>
+                </div>
+              )}
+            </motion.div>
+            <style>{`
+                    .hover-hint { opacity: 0; }
+                    div[style*="cursor: zoom-in"]:hover .hover-hint { opacity: 1 !important; }
+                `}</style>
+
+            {/* Next Image */}
+            <AnimatePresence>
+              {currentChapterIndex < chapters.length - 1 &&
+                chapters[currentChapterIndex + 1] && (
+                  <motion.div
+                    key={`next-${currentChapterIndex}`}
+                    initial={{ opacity: 0, x: 100, scale: 0.8 }}
+                    animate={{
+                      opacity: 0.4,
+                      x: 250,
+                      scale: 0.85,
+                      filter: "blur(4px)",
+                    }}
+                    exit={{ opacity: 0, x: 300 }}
+                    transition={{ duration: 0.4 }}
+                    onClick={nextChapter}
+                    style={{
+                      position: "absolute",
+                      height: "60%",
+                      aspectRatio: "4/3",
+                      cursor: "pointer",
+                      borderRadius: "16px",
+                      overflow: "hidden",
+                      border: "2px solid rgba(255,255,255,0.2)",
+                    }}
+                  >
+                    <img
+                      src={chapters[currentChapterIndex + 1].img_url}
+                      alt="Next"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        background: "#000",
+                      }}
+                    />
+                  </motion.div>
+                )}
+            </AnimatePresence>
+          </>
+        )}
       </div>
 
-      {/* Footer: Description & Date */}
+      {/* Footer: Controls & Caption */}
       <div
         style={{
-          padding: "0 48px 20px",
+          padding: "0 24px 20px",
           zIndex: 10,
-          textAlign: "center",
           background: "linear-gradient(to top, rgba(0,0,0,0.9), transparent)",
-          maxHeight: "40vh",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
           flexShrink: 0,
           marginTop: "-20px",
         }}
       >
+        {/* Caption text */}
         <motion.div
           key={currentChapter.text}
           initial={{ opacity: 0, y: 10 }}
@@ -830,41 +785,152 @@ export default function Journey() {
             color: "#ddd",
             lineHeight: 1.6,
             overflowY: "auto",
-            maxHeight: "100%",
+            maxHeight: "25vh",
+            textAlign: "center",
           }}
         >
           {currentChapter.text}
         </motion.div>
 
-        {/* Progress Bar */}
+        {/* Bottom row: Toggle (left) | Progress | Play (right) */}
         <div
           style={{
-            marginTop: "12px",
-            width: "100%",
-            maxWidth: "800px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            maxWidth: "1000px",
+            width: "90vw",
             margin: "12px auto 0",
+            gap: "16px",
           }}
         >
+          {/* Left: 2D/3D Toggle */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {is3DReady && (
+              <button
+                onClick={() => setShow3DView(!show3DView)}
+                className="glass-panel"
+                style={{
+                  padding: "10px 16px",
+                  background: show3DView
+                    ? "rgba(0, 200, 255, 0.2)"
+                    : "rgba(255, 255, 255, 0.1)",
+                  border: show3DView
+                    ? "1px solid rgba(0, 200, 255, 0.5)"
+                    : "1px solid rgba(255, 255, 255, 0.2)",
+                  color: "white",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "all 0.3s ease",
+                  fontSize: "0.85rem",
+                }}
+              >
+                {show3DView ? <Box size={18} /> : <Image size={18} />}
+                <span style={{ fontWeight: 500 }}>
+                  {show3DView ? "3D" : "2D"}
+                </span>
+              </button>
+            )}
+            {!is3DReady && currentChapter.splat_url === undefined && (
+              <div
+                className="glass-panel"
+                style={{
+                  padding: "10px 16px",
+                  color: "rgba(255,255,255,0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontSize: "0.85rem",
+                }}
+              >
+                <Loader2 size={16} className="spinner" />
+                <span>Loading 3D...</span>
+              </div>
+            )}
+          </div>
+
+          {/* Center: Progress Bar */}
           <div
             style={{
-              width: "100%",
-              height: "4px",
-              background: "rgba(255,255,255,0.1)",
-              borderRadius: "2px",
-              overflow: "hidden",
-              opacity: audioProgress > 0 && isPlaying ? 1 : 0,
-              transition: "opacity 0.3s",
+              flex: 1,
+              maxWidth: "500px",
             }}
           >
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${audioProgress * 100}%` }}
-              transition={{ ease: "linear", duration: 0.1 }}
+            <div
               style={{
-                height: "100%",
-                background: "#ffaa00",
+                width: "100%",
+                height: "4px",
+                background: "rgba(255,255,255,0.1)",
+                borderRadius: "2px",
+                overflow: "hidden",
+                opacity: audioProgress > 0 && isPlaying ? 1 : 0.3,
+                transition: "opacity 0.3s",
               }}
-            />
+            >
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${audioProgress * 100}%` }}
+                transition={{ ease: "linear", duration: 0.1 }}
+                style={{
+                  height: "100%",
+                  background: "#ffaa00",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Right: Play/Pause Button */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {isAudioProcessing ? (
+              <div
+                className="glass-panel"
+                style={{
+                  padding: "10px 16px",
+                  color: "rgba(255,255,255,0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontSize: "0.85rem",
+                }}
+              >
+                <Loader2 size={16} className="spinner" />
+                <span>Generating...</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsMuted(!isMuted)}
+                className="glass-panel"
+                disabled={!currentChapter.audio_url}
+                style={{
+                  padding: "10px 16px",
+                  background: !isMuted
+                    ? "rgba(255, 170, 0, 0.2)"
+                    : "rgba(255, 255, 255, 0.1)",
+                  border: !isMuted
+                    ? "1px solid rgba(255, 170, 0, 0.5)"
+                    : "1px solid rgba(255, 255, 255, 0.2)",
+                  color: "white",
+                  cursor: currentChapter.audio_url ? "pointer" : "not-allowed",
+                  opacity: currentChapter.audio_url ? 1 : 0.5,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "all 0.3s ease",
+                  fontSize: "0.85rem",
+                }}
+              >
+                {isMuted ? (
+                  <Play size={18} fill="currentColor" />
+                ) : (
+                  <Pause size={18} fill="currentColor" />
+                )}
+                <span style={{ fontWeight: 500 }}>
+                  {isMuted ? "Play" : "Pause"}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>
