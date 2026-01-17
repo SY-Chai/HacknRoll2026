@@ -1,8 +1,31 @@
 import express from 'express';
+import axios from 'axios';
 import { searchPhotographs } from '../scraper/nasScraper.js';
 import { enhanceDescription, generateAudio } from '../agent/researchAgent.js';
 
 const router = express.Router();
+
+// Proxy Image to avoid CORS/Hotlink protection
+router.get('/proxy-image', async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) {
+      return res.status(400).send("Missing url parameter");
+    }
+
+    const response = await axios({
+      url,
+      method: 'GET',
+      responseType: 'stream'
+    });
+
+    res.set('Content-Type', response.headers['content-type']);
+    response.data.pipe(res);
+  } catch (error) {
+    console.error("Proxy Image Error:", error.message);
+    res.status(500).send("Failed to fetch image");
+  }
+});
 
 router.get('/search', async (req, res) => {
   try {
