@@ -31,16 +31,20 @@ export default function Home() {
             setRecentSearches(newRecent);
             localStorage.setItem('recentSearches', JSON.stringify(newRecent));
 
-            // Fetch from backend
-            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            // Fetch from backend (New Journal API)
+            const response = await fetch('/api/journal/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+
             if (!response.ok) throw new Error('Search failed');
 
-            const responseData = await response.json();
-            const results = responseData.data || [];
+            const data = await response.json();
 
-            // Navigate immediately to Journey with all results
-            if (results.length > 0) {
-                navigate('/journey/search-results', { state: { results, query } });
+            // Navigate to Journey with ID
+            if (data.success && data.journalId) {
+                navigate(`/journey/${data.journalId}`);
             } else {
                 setError("No results found. Try a different query.");
             }
