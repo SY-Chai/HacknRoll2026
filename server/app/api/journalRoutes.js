@@ -53,7 +53,7 @@ router.post('/search', async (req, res) => {
         // Create Journal Entry immediately
         const { data: journal, error: journalError } = await supabase
             .from('Journal')
-            .insert({ query: query, user_created: false })
+            .insert({ query: query, user_created: false, created_at: new Date() })
             .select() // Return inserted row
             .single();
 
@@ -163,7 +163,8 @@ router.post('/create', upload.any(), async (req, res) => {
             .from('Journal')
             .insert({ 
                 user_created: true,
-                query: journalTitle || 'Untitled Journal' // Save Title in Query Column
+                query: journalTitle || 'Untitled Journal', // Save Title in Query Column
+                created_at: new Date()
             }) 
             .select()
             .single();
@@ -282,7 +283,7 @@ router.post('/batch', async (req, res) => {
             .from('Journal')
             .select('*')
             .in('id', ids)
-            .order('id', { ascending: false });
+            .order('created_at', { ascending: false });
 
         if (error) throw error;
 
@@ -300,7 +301,7 @@ router.get('/mine', async (req, res) => {
             .from('Journal')
             .select('*')
             .eq('user_created', true)
-            .order('id', { ascending: false });
+            .order('created_at', { ascending: false });
 
         if (error) throw error;
 
