@@ -1,0 +1,242 @@
+# SHARP 3DGS RunPod Inference Service
+
+Deploy Apple's [SHARP](https://github.com/apple/ml-sharp) (Single-image High-fidelity Appearance Reconstruction with Primitives) model as a serverless inference endpoint on RunPod.
+
+**Input**: Single RGB image or batch of images  
+**Output**: 3D Gaussian Splatting PLY file(s)
+
+## Quick Start
+
+### 1. Build the Docker Image
+
+```bash
+docker build -t sharp-runpod .
+```
+
+### 2. Push to Docker Hub (or your registry)
+
+```bash
+docker tag sharp-runpod your-username/sharp-runpod:latest
+docker push your-username/sharp-runpod:latest
+```
+
+### 3. Deploy on RunPod
+
+1. Go to [RunPod Serverless](https://www.runpod.io/console/serverless)
+2. Create a new endpoint
+3. Select your Docker image: `your-username/sharp-runpod:latest`
+4. Configure GPU (recommended: RTX 3090/4090 or A10G, minimum 24GB VRAM)
+5. Deploy
+
+## API Usage
+
+### Single Image Request
+
+```json
+{
+  "input": {
+    "image": "<base64_encoded_image>"
+  }
+}
+```
+
+Or using an image URL:
+
+```json
+{
+  "input": {
+    "image_url": "https://example.com/image.jpg"
+  }
+}
+```
+
+### Single Image Response
+
+```json
+{
+  "status": "success",
+  "ply_url": "https://your-bucket.r2.dev/job-id.ply",
+  "num_gaussians": 589824,
+  "image_size": {"width": 1920, "height": 1080},
+  "focal_length_px": 1234.56
+}
+```
+
+### Batch Request
+
+Process multiple images in a single request:
+
+```json
+{
+  "input": {
+    "images": [
+      {"image": "<base64_encoded_image_1>"},
+      {"image_url": "https://example.com/image2.jpg"},
+      {"image": "<base64_encoded_image_3>"}
+    ]
+  }
+}
+```
+
+### Batch Response
+
+```json
+{
+  "status": "success",
+  "results": [
+    {
+      "status": "success",
+      "ply_url": "https://your-bucket.r2.dev/job-id_0.ply",
+      "num_gaussians": 589824,
+      "image_size": {"width": 1920, "height": 1080},
+      "focal_length_px": 1234.56
+    },
+    {
+      "status": "success",
+      "ply_url": "https://your-bucket.r2.dev/job-id_1.ply",
+      "num_gaussians": 524288,
+      "image_size": {"width": 1280, "height": 720},
+      "focal_length_px": 987.65
+    },
+    {
+      "status": "error",
+      "message": "Failed to decode image"
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "succeeded": 2,
+    "failed": 1
+  }
+}
+```
+
+The batch response status will be:
+- `"success"` if all images processed successfully
+- `"partial"` if some images failed
+
+### Example: Python Client (Single Image)
+
+```python
+import runpod
+import base64
+
+runpod.api_key = "your-runpod-api-key"
+
+# Load image
+with open("input.jpg", "rb") as f:
+    image_base64 = base64.b64encode(f.read()).decode()
+
+# Run inference
+endpoint = runpod.Endpoint("your-endpoint-id")
+result = endpoint.run_sync({
+    "input": {
+        "image": image_base64
+    }
+})
+
+# Get PLY URL
+if result["status"] == "success":
+    print(f"PLY URL: {result['ply_url']}")
+    print(f"Generated {result['num_gaussians']} Gaussians")
+```
+
+### Example: Python Client (Batch)
+
+```python
+import runpod
+import base64
+
+runpod.api_key = "your-runpod-api-key"
+
+# Load multiple images
+images = []
+for path in ["image1.jpg", "image2.jpg", "image3.jpg"]:
+    with open(path, "rb") as f:
+        images.append({"image": base64.b64encode(f.read()).decode()})
+
+# Run batch inference
+endpoint = runpod.Endpoint("your-endpoint-id")
+result = endpoint.run_sync({
+    "input": {
+        "images": images
+    }
+})
+
+# Process results
+print(f"Summary: {result['summary']}")
+for i, r in enumerate(result["results"]):
+    if r["status"] == "success":
+        print(f"[{i}] PLY URL: {r['ply_url']}, Gaussians: {r['num_gaussians']}")
+    else:
+        print(f"[{i}] Error: {r['message']}")
+```
+
+### Example: cURL
+
+```bash
+# Using base64 image
+IMAGE_BASE64=$(base64 -w 0 input.jpg)
+curl -X POST "https://api.runpod.ai/v2/your-endpoint-id/runsync" \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d "{\"input\": {\"image\": \"$IMAGE_BASE64\"}}"
+
+# Using image URL
+curl -X POST "https://api.runpod.ai/v2/your-endpoint-id/runsync" \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"image_url": "https://example.com/photo.jpg"}}'
+```
+
+## Output PLY Format
+
+The output PLY file is compatible with standard 3D Gaussian Splatting viewers:
+
+- [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/)
+- [gsplat](https://github.com/nerfstudio-project/gsplat)
+- [3D Gaussian Splatting (original)](https://github.com/graphdeco-inria/gaussian-splatting)
+
+The PLY contains:
+- 3D Gaussian positions (mean vectors)
+- Covariance matrices (quaternions + scales)
+- Spherical harmonics (degree 0, RGB color)
+- Opacity values
+
+Coordinate system: OpenCV convention (x right, y down, z forward)
+
+## Local Testing
+
+```bash
+# Build
+docker build -t sharp-runpod .
+
+# Run locally (requires NVIDIA GPU)
+docker run --gpus all -p 8000:8000 sharp-runpod
+
+# Test with a sample request
+curl -X POST http://localhost:8000/runsync \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"image_url": "https://example.com/test.jpg"}}'
+```
+
+## Hardware Requirements
+
+- **GPU**: NVIDIA GPU with CUDA support (24GB+ VRAM recommended)
+- **Inference time**: ~1 second per image on RTX 4090
+- **Model size**: ~185MB (downloaded automatically on first run)
+
+## Model Details
+
+SHARP predicts 3D Gaussian parameters directly from a single image in under one second. The model:
+
+1. Takes an RGB image as input
+2. Estimates monocular depth
+3. Predicts Gaussian parameters (position, covariance, color, opacity) in NDC space
+4. Unprojects to world coordinates using camera intrinsics
+
+The output is a dense 3D representation suitable for novel view synthesis.
+
+## License
+
+SHARP model and code: See [Apple's ml-sharp repository](https://github.com/apple/ml-sharp) for licensing terms.

@@ -5,7 +5,7 @@ import { enhanceDescription, generateAudio, colorizeImage } from '../agent/resea
 
 const router = express.Router();
 
-// Proxy Image to avoid CORS/Hotlink protection
+// Image Proxy
 router.get('/proxy-image', async (req, res) => {
   try {
     const { url } = req.query;
