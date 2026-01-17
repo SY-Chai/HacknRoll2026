@@ -5,6 +5,7 @@ import routes from './app/api/routes.js';
 import path from 'path';
 import dotenv from 'dotenv';
 
+dotenv.config();
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const app = express();
@@ -17,8 +18,11 @@ app.use(express.json());
 app.use('/audio', express.static(path.join(process.cwd(), 'tmp')));
 app.use('/color', express.static(path.join(process.cwd(), 'tmp', 'color_cache')));
 
+import journalRoutes from './app/api/journalRoutes.js';
+
 // Routes
 app.use('/api', routes);
+app.use('/api/journal', journalRoutes);
 
 // Base route for health check
 app.get('/', (req, res) => {

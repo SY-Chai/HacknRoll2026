@@ -1,12 +1,12 @@
-import express from "express";
-import axios from "axios";
-import { searchPhotographs } from "../scraper/nasScraper.js";
-import {
-  enhanceDescription,
-  generateAudio,
-  colorizeImage,
-} from "../agent/researchAgent.js";
-import { generate3DGaussians } from "../services/sharpService.js";
+import express from 'express';
+import axios from 'axios';
+import { searchPhotographs } from '../scraper/nasScraper.js';
+import { enhanceDescription, generateAudio, colorizeImage } from '../agent/researchAgent.js';
+import { supabase } from '../config/supabase.js';
+import { r2Client, R2_BUCKETS, R2_DOMAINS } from '../config/r2.js';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import fs from 'fs';
+import path from 'path';
 
 const router = express.Router();
 
@@ -96,20 +96,58 @@ router.get("/search", async (req, res) => {
 // New Endpoint: Lazy Generate Audio
 router.post("/generate-audio", async (req, res) => {
   try {
-    const { text, id } = req.body;
+    const { text, id, recordId } = req.body;
     if (!text) return res.status(400).json({ error: "Text is required" });
 
     console.log(`Generating audio on-demand for ID: ${id}`);
     // Use a unique ID based on timestamp if valid ID not provided
     const safeId = id || Date.now().toString();
 
-    const audioFile = await generateAudio(text, safeId);
+    const audioFilename = await generateAudio(text, safeId);
 
-    if (!audioFile) {
+    if (!audioFilename) {
       return res.status(500).json({ error: "Audio generation failed" });
     }
 
-    res.json({ success: true, audioUrl: `/audio/${audioFile}` });
+    if (!R2_BUCKETS.AUDIO) {
+         console.warn("⚠️ R2 Audio Bucket not configured. Skipping upload.");
+         return res.json({ success: true, audioUrl: `/audio/${audioFilename}` });
+    }
+
+    let finalAudioUrl = `/audio/${audioFilename}`; // Default to local
+    try {
+        const filePath = path.join(process.cwd(), 'tmp', audioFilename);
+        const fileBuffer = fs.readFileSync(filePath);
+        
+        const key = `audio-${safeId}-${Date.now()}.mp3`;
+        const command = new PutObjectCommand({
+            Bucket: R2_BUCKETS.AUDIO,
+            Key: key,
+            Body: fileBuffer,
+            ContentType: 'audio/mpeg'
+        });
+        
+        await r2Client.send(command);
+        finalAudioUrl = `${R2_DOMAINS.AUDIO}/${key}`;
+        console.log(`Audio uploaded to R2: ${finalAudioUrl}`);
+
+        // Update DB if recordId provided
+        if (recordId) {
+            const { error: updateError } = await supabase
+                .from('Record')
+                .update({ audio_url: finalAudioUrl })
+                .eq('id', recordId);
+            
+            if (updateError) console.error("Failed to update Record with audio URL:", updateError);
+            else console.log(`DB updated for record ${recordId}`);
+        }
+
+    } catch (r2Error) {
+        console.error("R2 Upload failed for audio:", r2Error);
+    }
+
+    res.json({ success: true, audioUrl: finalAudioUrl });
+
   } catch (error) {
     console.error("Generate Audio API Error:", error);
     res.status(500).json({ error: error.message });

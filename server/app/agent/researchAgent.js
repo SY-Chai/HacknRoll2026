@@ -6,7 +6,9 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+// Lazy load .env
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });

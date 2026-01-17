@@ -1,46 +1,54 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import SceneViewer from "../components/SceneViewer";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Home as HomeIcon,
-  X,
-  Maximize2,
-  Volume2,
-  VolumeX,
-  Loader2,
-  Play,
-  Pause,
-  Palette,
-} from "lucide-react";
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import SceneViewer from '../components/SceneViewer';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronLeft, ChevronRight, Home as HomeIcon, X, Maximize2, Volume2, VolumeX, Loader2, Play, Pause, Palette } from 'lucide-react';
 
 export default function Journey() {
-  const { state } = useLocation();
+  const { id } = useParams();
   const navigate = useNavigate();
 
-  // Support both single result (legacy/direct/refresh) and array of results (carousel)
-  const results = state?.results || (state?.result ? [state.result] : []);
+  const [chapters, setChapters] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Initialize chapters state from search results
-  const initialChapters = results.map((item, index) => ({
-    id: index.toString(),
-    title: item.title,
-    text: item.description || "No description available.",
-    visualFocus: "default",
-    // Use proxy for images to avoid CORs/Hotlink issues
-    img_url: item.imageUrl
-      ? `/api/proxy-image?url=${encodeURIComponent(item.imageUrl)}`
-      : null,
-    date: item.date,
-    audio_url: item.audio || null,
-    colorized_url: null, // AI colorized version
-    isColorMode: false, // Toggle between original and colorized
-  }));
+  useEffect(() => {
+    const fetchJournal = async () => {
+      if (!id) return;
+      setIsLoading(true);
+      try {
+        const res = await fetch(`/api/journal/${id}`);
+        if (!res.ok) throw new Error("Journal not found");
+        const data = await res.json();
 
-  // Use State for chapters to allow updating audio URLs dynamically
-  const [chapters, setChapters] = useState(initialChapters);
+        // Map DB Records to Chapters
+        const mappedChapters = data.records.map((record, index) => ({
+          id: record.id,
+          title: record.title,
+          text: record.description || "No description available.",
+          visualFocus: 'default',
+          img_url: record.image_url ? `/api/proxy-image?url=${encodeURIComponent(record.image_url)}` : null,
+          date: record.created_at ? new Date(record.created_at).toLocaleDateString() : "Unknown Date",
+          audio_url: record.audio_url,
+          colorized_url: null,
+          isColorMode: false
+        }));
+
+        console.log("Mapped Chapters:", mappedChapters);
+        if (mappedChapters.length === 0) console.warn("No chapters found in journal!");
+
+        setChapters(mappedChapters);
+      } catch (err) {
+        console.error("Failed to load journal:", err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchJournal();
+  }, [id]);
+
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
 
   // Audio State
@@ -56,50 +64,31 @@ export default function Journey() {
   const audioRef = useRef(null);
   const currentChapter = chapters[currentChapterIndex];
 
-  // Handle missing state
-  if (chapters.length === 0) {
-    return (
-      <div
-        className="full-screen"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-        }}
-      >
-        <p>No journey data found.</p>
-        <button
-          onClick={() => navigate("/")}
-          className="glass-panel"
-          style={{
-            marginTop: "20px",
-            padding: "12px 24px",
-            cursor: "pointer",
-            color: "white",
-          }}
-        >
-          Return to Home
-        </button>
-      </div>
-    );
-  }
-
   /* --- Audio Logic Start --- */
 
   const stopAudio = () => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
-      setIsPlaying(false);
-      setAudioProgress(0);
+    }
+    setIsPlaying(false);
+    setAudioProgress(0);
+  };
+
+  const onEnd = () => {
+    setIsPlaying(false);
+    setAudioProgress(0);
+  };
+
+  const updateProgress = () => {
+    if (audioRef.current && audioRef.current.duration) {
+      setAudioProgress(audioRef.current.currentTime / audioRef.current.duration);
     }
   };
 
   const playAudio = (url) => {
-    if (!url) return;
-    const fullUrl = url.startsWith("http") ? url : url;
+    if (!url || !audioRef.current) return;
+    const fullUrl = url.startsWith('http') ? url : url;
 
     if (!audioRef.current.src.includes(url)) {
       audioRef.current.src = fullUrl;
@@ -111,7 +100,7 @@ export default function Journey() {
       if (playPromise !== undefined) {
         playPromise
           .then(() => setIsPlaying(true))
-          .catch((e) => console.error("Audio Play Error:", e));
+          .catch(e => console.error("Audio Play Error:", e));
       }
     }
   };
@@ -120,19 +109,10 @@ export default function Journey() {
     const audio = new Audio();
     audioRef.current = audio;
 
-    const updateProgress = () => {
-      if (audio.duration) {
-        setAudioProgress(audio.currentTime / audio.duration);
-      }
-    };
 
-    const onEnd = () => {
-      setIsPlaying(false);
-      setAudioProgress(1);
-    };
 
-    audio.addEventListener("timeupdate", updateProgress);
-    audio.addEventListener("ended", onEnd);
+    audio.addEventListener('timeupdate', updateProgress);
+    audio.addEventListener('ended', onEnd);
 
     return () => {
       audio.removeEventListener("timeupdate", updateProgress);
@@ -157,13 +137,15 @@ export default function Journey() {
           .substring(0, 30);
         const stableId = `${safeTitle}_${currentChapter.date ? currentChapter.date.replace(/[^a-zA-Z0-9]/g, "") : "nodate"}`;
 
-        const response = await fetch("/api/generate-audio", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+
+        const response = await fetch('/api/generate-audio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             text: currentChapter.text,
             id: stableId,
-          }),
+            recordId: currentChapter.id // Pass DB ID for updating
+          })
         });
 
         if (!response.ok) return;
@@ -191,6 +173,8 @@ export default function Journey() {
     fetchAudioIfNeeded();
   }, [currentChapterIndex, currentChapter?.text]);
 
+
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentChapter) return;
@@ -209,7 +193,7 @@ export default function Journey() {
             if (playPromise !== undefined) {
               playPromise
                 .then(() => setIsPlaying(true))
-                .catch((e) => console.error("Audio Play Error:", e));
+                .catch(e => console.error("Audio Play Error:", e));
             }
           }
         }
@@ -221,28 +205,51 @@ export default function Journey() {
 
   /* --- Audio Logic End --- */
 
+  if (isLoading) {
+    return (
+      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+        <Loader2 size={48} className="spinner" />
+        <p style={{ marginTop: '16px' }}>Restoring Memory...</p>
+      </div>
+    );
+  }
+
+  if (error || chapters.length === 0) {
+    return (
+      <div className="full-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+        <p>{error || "No journey data found."}</p>
+        <button
+          onClick={() => navigate('/')}
+          className="glass-panel"
+          style={{ marginTop: '20px', padding: '12px 24px', cursor: 'pointer', color: 'white' }}
+        >
+          Return to Home
+        </button>
+      </div>
+    );
+  }
+
   const nextChapter = () => {
     if (currentChapterIndex < chapters.length - 1) {
-      setCurrentChapterIndex((prev) => prev + 1);
+      setCurrentChapterIndex(prev => prev + 1);
       setAudioProgress(0);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const prevChapter = () => {
     if (currentChapterIndex > 0) {
-      setCurrentChapterIndex((prev) => prev - 1);
+      setCurrentChapterIndex(prev => prev - 1);
       setAudioProgress(0);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handleColorize = async () => {
     if (currentChapter.colorized_url) {
-      setChapters((prev) => {
+      setChapters(prev => {
         const next = [...prev];
-        next[currentChapterIndex].isColorMode =
-          !next[currentChapterIndex].isColorMode;
+        next[currentChapterIndex].isColorMode = !next[currentChapterIndex].isColorMode;
         return next;
       });
       return;
@@ -250,23 +257,23 @@ export default function Journey() {
 
     setIsColorizing(true);
     try {
-      const originalUrl = results[currentChapterIndex].imageUrl;
-      const response = await fetch("/api/colorize-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: originalUrl }),
+      const originalUrl = chapters[currentChapterIndex].img_url;
+      const response = await fetch('/api/colorize-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: originalUrl })
       });
 
       if (!response.ok) throw new Error("Colorization failed");
 
       const data = await response.json();
       if (data.success && data.colorUrl) {
-        setChapters((prev) => {
+        setChapters(prev => {
           const next = [...prev];
           next[currentChapterIndex] = {
             ...next[currentChapterIndex],
             colorized_url: data.colorUrl,
-            isColorMode: true,
+            isColorMode: true
           };
           return next;
         });
@@ -277,6 +284,10 @@ export default function Journey() {
       setIsColorizing(false);
     }
   };
+
+  /* --- Audio Logic End --- */
+
+
 
   return (
     <div
@@ -693,17 +704,7 @@ export default function Journey() {
           marginTop: "-20px",
         }}
       >
-        <div
-          style={{
-            fontSize: "0.9rem",
-            color: "rgba(255,255,255,0.6)",
-            marginBottom: "4px",
-            fontWeight: 500,
-            letterSpacing: "1px",
-          }}
-        >
-          {currentChapter.date}
-        </div>
+
 
         <motion.div
           key={currentChapter.text}
