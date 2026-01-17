@@ -132,6 +132,17 @@ function createWavHeader(dataLength, sampleRate = 24000, numChannels = 1, bitsPe
 
 // Generate Audio using Gemini TTS
 export async function generateAudio(text, itemId) {
+  // 1. Check if audio file already exists for this ID
+  // Note: We use the EXACT itemId passed, assuming it is stable.
+  const filename = `audio_${itemId}.wav`;
+  const tmpDir = path.join(process.cwd(), 'tmp');
+  const filePath = path.join(tmpDir, filename);
+
+  if (fs.existsSync(filePath)) {
+      console.log(`Audio Cache Hit: Reusing ${filename}`);
+      return filename;
+  }
+
   // Use a known valid model supporting Audio generation
   const ttsModel = "gemini-2.5-flash-preview-tts";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -176,13 +187,11 @@ export async function generateAudio(text, itemId) {
       const wavHeader = createWavHeader(rawBuffer.length, sampleRate);
       const finalBuffer = Buffer.concat([wavHeader, rawBuffer]);
 
-      const filename = `audio_${itemId}_${Date.now()}.wav`; // Correct extension .wav
-      const tmpDir = path.join(process.cwd(), 'tmp');
+      // Filename is already defined at top of function
       if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir);
       }
-      const filePath = path.join(tmpDir, filename);
-
+      
       fs.writeFileSync(filePath, finalBuffer);
       console.log(`Audio saved to: ${filePath}`);
       return filename;

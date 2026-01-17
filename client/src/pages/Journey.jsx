@@ -136,12 +136,17 @@ export default function Journey() {
             try {
                 // console.log(`Fetching audio for chapter: ${currentChapter.title}`);
                 // Using the URL structure compatible with the proxy setup if backend is on 3000
+                // Create a stable ID based on title to allow server-side caching
+                // Remove special chars and limit length, append a simple hash of date or content
+                const safeTitle = currentChapter.title.replace(/[^a-zA-Z0-9]/g, '').substring(0, 30);
+                const stableId = `${safeTitle}_${currentChapter.date ? currentChapter.date.replace(/[^a-zA-Z0-9]/g, '') : 'nodate'}`;
+
                 const response = await fetch('/api/generate-audio', { // Relative path uses Vite proxy
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         text: currentChapter.text,
-                        id: `${currentChapterIndex}_${Date.now()}` // Unique ID
+                        id: stableId // Stable ID for caching
                     })
                 });
 
