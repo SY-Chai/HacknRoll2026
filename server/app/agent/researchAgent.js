@@ -8,41 +8,39 @@ dotenv.config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-// Custom lightweight Search scraper (Switching to DuckDuckGo HTML for easier scraping)
-async function searchGoogle(query) {
+// Exa Search API
+async function searchExa(query) {
   try {
-    console.log(`Searching for: ${query}`);
-    // Using DuckDuckGo HTML version which is friendlier to bots/scraping than Google
-    const response = await axios.get('https://html.duckduckgo.com/html/', {
-      params: { q: query },
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    console.log(`Searching Exa for: ${query}`);
+    const response = await axios.post('https://api.exa.ai/search', 
+      {
+        query: query,
+        numResults: 3,
+        contents: {
+          text: true
+        }
+      },
+      {
+        headers: {
+          'accept': 'application/json',
+          'content-type': 'application/json',
+          'x-api-key': process.env.EXA_API_KEY
+        }
       }
-    });
-
-    const $ = cheerio.load(response.data);
-    const snippets = [];
-
-    // DuckDuckGo HTML selectors are usually .result__body or .result__snippet
-    // Title: .result__a
-    // Snippet: .result__snippet
+    );
     
-    $('.result').each((i, el) => {
-      if (snippets.length >= 3) return; 
+    // Check if results exist
+    const results = response.data.results || [];
+    const snippets = results.map(r => `Title: ${r.title}\nText: ${r.text.substring(0, 300)}...`);
 
-      const title = $(el).find('.result__a').text().trim();
-      const snippet = $(el).find('.result__snippet').text().trim();
-      
-      if (title && snippet) {
-         snippets.push(`${title}: ${snippet}`);
-      }
-    });
-
-    console.log(`Found ${snippets.length} snippets.`);
+    console.log(`Found ${snippets.length} snippets via Exa.`);
     return snippets.join('\n\n');
 
   } catch (error) {
-    console.error('Search failed:', error.message);
+    console.error('Exa Search failed:', error.message);
+    if (error.response) {
+       console.error('Exa API Error Data:', error.response.data);
+    }
     return "";
   }
 }
@@ -51,20 +49,33 @@ export async function enhanceDescription(title, date) {
   console.log(`Enhancing description for: ${title} (${date})`);
 
   try {
-    // 1. Search for context
-    const searchQuery = `${title} ${date} singapore history context`;
-    const searchContext = await searchGoogle(searchQuery);
-
+    // 1. Search for context with retries
+    let searchContext = "";
+    
+    // Attempt 1: Specific query
+    let searchQuery = `${title} ${date} singapore history`;
+    searchContext = await searchExa(searchQuery);
+    
+    // Attempt 2: Broader query if first failed
     if (!searchContext) {
-      return "Historical context could not be retrieved.";
+      console.log("Attempt 1 failed, trying broader query...");
+      searchQuery = `${title} singapore`;
+      searchContext = await searchExa(searchQuery);
     }
+    
+    if (!searchContext) {
+      return "Historical context could not be retrieved from search.";
+    }
+
+    console.log("Search Context passed to Gemini:", searchContext.substring(0, 200) + "...");
 
     // 2. Generate description with Gemini
     const prompt = `
       You are a historical researcher. 
-      Based STRICTLY on the following search results, write a concise, engaging 2-sentence description for a photograph titled "${title}" taken around ${date}.
+      Use the following search results to write a concise, engaging 2-sentence description for a photograph titled "${title}" taken around ${date}.
       
-      Focus on the historical significance or event happening at that time. Do not mention that you searched the internet.
+      The search results might not contain this exact photo, but they should contain relevant historical context about the people, institution, or event.
+      Synthesize the best possible description based on these results. Explain the significance of the subject or the era.
       
       Search Results:
       ${searchContext}
