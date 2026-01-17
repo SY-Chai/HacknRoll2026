@@ -42,10 +42,12 @@ export const r2Client = new S3Client({
 
 export const R2_BUCKETS = {
     IMAGE: process.env.R2_IMAGE_BUCKET || 'images',
-    AUDIO: process.env.R2_AUDIO_BUCKET || 'audio'
+    AUDIO: process.env.R2_AUDIO_BUCKET || 'audio',
+    SPLAT: process.env.R2_SPLAT_BUCKET || 'splats'
 };
 
 export const R2_DOMAINS = {
     IMAGE: process.env.CLOUDFLARE_R2_IMAGE_URL || process.env.R2_IMAGE_DOMAIN || `https://${process.env.R2_IMAGE_BUCKET}`,
-    AUDIO: process.env.CLOUDFLARE_R2_AUDIO_URL || process.env.R2_AUDIO_DOMAIN || `https://${process.env.R2_AUDIO_BUCKET}`
+    AUDIO: process.env.CLOUDFLARE_R2_AUDIO_URL || process.env.R2_AUDIO_DOMAIN || `https://${process.env.R2_AUDIO_BUCKET}`,
+    SPLAT: process.env.CLOUDFLARE_R2_SPLAT_URL || process.env.R2_SPLAT_DOMAIN || `https://${process.env.R2_SPLAT_BUCKET}`
 };

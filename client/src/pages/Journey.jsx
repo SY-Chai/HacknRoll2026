@@ -30,6 +30,7 @@ export default function Journey() {
           img_url: record.image_url ? `/api/proxy-image?url=${encodeURIComponent(record.image_url)}` : null,
           date: record.created_at ? new Date(record.created_at).toLocaleDateString() : "Unknown Date",
           audio_url: record.audio_url,
+          splat_url: record.splat_url,
           colorized_url: null,
           isColorMode: false
         }));
@@ -108,8 +109,6 @@ export default function Journey() {
   useEffect(() => {
     const audio = new Audio();
     audioRef.current = audio;
-
-
 
     audio.addEventListener('timeupdate', updateProgress);
     audio.addEventListener('ended', onEnd);
@@ -299,7 +298,7 @@ export default function Journey() {
         overflow: "auto",
       }}
     >
-      <SceneViewer visualFocus={currentChapter.visualFocus} />
+      <SceneViewer visualFocus={currentChapter.visualFocus} splatUrl={currentChapter.splat_url} />
 
       {/* Header: Title & Controls */}
       <div

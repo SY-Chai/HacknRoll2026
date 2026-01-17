@@ -163,7 +163,8 @@ router.post('/create', upload.any(), async (req, res) => {
                 title: itemMetadata.title,
                 description: itemMetadata.description,
                 image_url: imageUrl,
-                audio_url: audioUrl
+                audio_url: null,
+                splat_url: null
             });
         }
 
