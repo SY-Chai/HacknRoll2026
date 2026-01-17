@@ -626,7 +626,7 @@ export default function Journey() {
                             }}
                             onClick={(e) => e.stopPropagation()}
                         />
-                    </motion.img>
+                    </motion.div>
                 )}
             </AnimatePresence>
         </div>
