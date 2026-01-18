@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, X, Upload, Save, Loader2 } from 'lucide-react';
+import { ChevronLeft, Plus, X, Upload, Save, Loader2, Volume2, Image as ImageIcon, Mic } from 'lucide-react';
 import SceneViewer from '../components/SceneViewer';
 
 export default function CreateJourney() {
@@ -106,176 +106,270 @@ export default function CreateJourney() {
                 position: 'fixed', top: 0, left: 0, width: '100%',
                 padding: '20px 40px', zIndex: 50,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)'
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)',
+                pointerEvents: 'none' // Allow clicks to pass through except for buttons
             }}>
-                <button onClick={() => navigate('/')} className="glass-panel" style={{ padding: '12px', color: 'white' }}>
+                <button
+                    onClick={() => navigate('/')}
+                    className="glass-panel"
+                    style={{ padding: '12px', color: 'white', pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
                     <ChevronLeft size={24} />
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 500 }}>Back</span>
                 </button>
-                <div style={{ color: 'white', fontWeight: 700, fontSize: '1.2rem' }}>Create Journey</div>
-                <div style={{ width: 48 }} /> {/* Spacer */}
+                <div style={{ color: 'white', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.5rem', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+                    My Journal
+                </div>
+                <div style={{ width: 80 }} /> {/* Spacer */}
             </div>
 
-            <div className="container" style={{ marginTop: '100px', maxWidth: '800px', position: 'relative', zIndex: 10 }}>
-                {items.map((item, index) => (
-                    <div key={item.id} className="glass-panel" style={{ padding: '24px', marginBottom: '24px', position: 'relative' }}>
+            <div className="container" style={{ marginTop: '120px', maxWidth: '1000px', position: 'relative', zIndex: 10 }}>
 
-                        {/* Remove Button */}
-                        {items.length > 1 && (
-                            <button
-                                onClick={() => removeItem(item.id)}
-                                style={{
-                                    position: 'absolute', top: 16, right: 16,
-                                    background: 'rgba(255,100,100,0.2)', color: '#ff6b6b',
-                                    border: 'none', borderRadius: '50%', padding: '8px',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                <X size={16} />
-                            </button>
-                        )}
+                {/* Intro Text */}
+                <div style={{ textAlign: 'center', marginBottom: '40px', color: 'rgba(255,255,255,0.8)' }}>
+                    <p style={{ fontFamily: 'Georgia, serif', fontSize: '1.8rem', fontStyle: 'italic', transform: 'rotate(-1deg)' }}>
+                        "Collecting moments, carefully curating memories..."
+                    </p>
+                </div>
 
-                        <div style={{ marginBottom: '16px', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>
-                            Record #{index + 1}
-                        </div>
+                {items.map((item, index) => {
+                    const rotation = (index % 3 - 1) * 1.5; // -1.5, 0, 1.5
 
-                        {/* Title Input */}
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={{ display: 'block', color: 'white', marginBottom: '8px', fontSize: '0.9rem' }}>Title</label>
-                            <input
-                                type="text"
-                                value={item.title}
-                                onChange={(e) => handleInputChange(item.id, 'title', e.target.value)}
-                                placeholder="e.g. My Grandmother's House"
-                                style={{
-                                    width: '100%', padding: '12px',
-                                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
-                                    borderRadius: '8px', color: 'white', fontSize: '1rem'
-                                }}
-                            />
-                        </div>
+                    return (
+                        <div key={item.id} style={{
+                            position: 'relative',
+                            marginBottom: '60px',
+                            transform: `rotate(${rotation}deg)`,
+                            transition: 'all 0.3s ease'
+                        }}>
 
-                        {/* Description Input */}
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={{ display: 'block', color: 'white', marginBottom: '8px', fontSize: '0.9rem' }}>Description</label>
-                            <textarea
-                                value={item.description}
-                                onChange={(e) => handleInputChange(item.id, 'description', e.target.value)}
-                                placeholder="Tell the story of this memory..."
-                                rows={4}
-                                style={{
-                                    width: '100%', padding: '12px',
-                                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
-                                    borderRadius: '8px', color: 'white', fontSize: '1rem', resize: 'vertical'
-                                }}
-                            />
-                        </div>
+                            {/* Tape Effect */}
+                            <div className="tape-strip" style={{
+                                position: 'absolute', top: -15, left: '50%', transform: 'translateX(-50%) rotate(-1deg)',
+                                width: '140px', height: '40px', zIndex: 20
+                            }} />
 
-                        {/* File Uploads */}
-                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                            {/* Image Upload */}
-                            <div style={{ flex: 1, minWidth: '200px' }}>
-                                <label style={{ display: 'block', color: 'white', marginBottom: '8px', fontSize: '0.9rem' }}>Photo (Required)</label>
-                                <div style={{
-                                    position: 'relative',
-                                    height: '200px',
-                                    background: 'rgba(0,0,0,0.3)',
-                                    border: '2px dashed rgba(255,255,255,0.2)',
-                                    borderRadius: '12px',
-                                    overflow: 'hidden',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    cursor: 'pointer'
-                                }}>
-                                    {item.imagePreview ? (
-                                        <img src={item.imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    ) : (
-                                        <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
-                                            <Upload size={24} style={{ marginBottom: '8px' }} />
-                                            <div>Click to upload</div>
+                            {/* Card Content */}
+                            <div className="glass-panel" style={{
+                                padding: '40px',
+                                display: 'grid',
+                                gridTemplateColumns: 'minmax(250px, 1fr) 1.5fr',
+                                gap: '40px',
+                                background: 'rgba(15, 15, 20, 0.75)', // Slightly darker for contrast
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
+                            }}>
+
+                                {/* Remove Button */}
+                                {items.length > 1 && (
+                                    <button
+                                        onClick={() => removeItem(item.id)}
+                                        style={{
+                                            position: 'absolute', top: 16, right: 16,
+                                            background: 'rgba(255,100,100,0.1)', color: '#ff6b6b',
+                                            border: 'none', borderRadius: '50%', padding: '8px',
+                                            cursor: 'pointer', zIndex: 30,
+                                            transition: 'all 0.2s'
+                                        }}
+                                        title="Remove Memory"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                )}
+
+                                {/* Left Column: Polaroid Image */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                    <div className="polaroid-frame" style={{
+                                        width: '100%',
+                                        aspectRatio: '1/1.1', // Classic Polaroid ratio
+                                        background: '#f0f0f0',
+                                        display: 'flex', flexDirection: 'column',
+                                        position: 'relative',
+                                        transform: 'rotate(-2deg)'
+                                    }}>
+                                        {/* Image Area */}
+                                        <div style={{
+                                            flex: 1,
+                                            background: '#2a2a2a',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            overflow: 'hidden',
+                                            cursor: 'pointer',
+                                            position: 'relative'
+                                        }} onClick={() => document.getElementById(`file-input-${item.id}`).click()}>
+
+                                            {item.imagePreview ? (
+                                                <img src={item.imagePreview} alt="Memory" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : (
+                                                <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', padding: '20px' }}>
+                                                    <Upload size={32} style={{ marginBottom: '10px', opacity: 0.7 }} />
+                                                    <div style={{ fontSize: '0.9rem', fontFamily: 'var(--font-display)' }}>Tap to Add Photo</div>
+                                                </div>
+                                            )}
+
+                                            <input
+                                                id={`file-input-${item.id}`}
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(e) => handleFileChange(item.id, 'image', e.target.files[0])}
+                                                style={{ display: 'none' }}
+                                            />
                                         </div>
-                                    )}
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => handleFileChange(item.id, 'image', e.target.files[0])}
-                                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Audio Upload */}
-                            <div style={{ flex: 1, minWidth: '200px' }}>
-                                <label style={{ display: 'block', color: 'white', marginBottom: '8px', fontSize: '0.9rem' }}>Audio Narration (Optional)</label>
-                                <div style={{
-                                    height: '200px',
-                                    background: 'rgba(0,0,0,0.3)',
-                                    border: '2px dashed rgba(255,255,255,0.2)',
-                                    borderRadius: '12px',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    position: 'relative'
-                                }}>
-                                    <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
-                                        {item.audio ? (
-                                            <span style={{ color: '#4cc9f0' }}>{item.audio.name}</span>
-                                        ) : (
-                                            <>
-                                                <Volume2 size={24} style={{ marginBottom: '8px' }} />
-                                                <div>Click to upload audio</div>
-                                            </>
-                                        )}
+                                        {/* Caption Area (Visual only) */}
+                                        <div style={{ height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <span style={{ fontFamily: 'Georgia, serif', color: '#333', fontSize: '1.2rem' }}>
+                                                {item.title || "Untitled Memory"}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <input
-                                        type="file"
-                                        accept="audio/*"
-                                        onChange={(e) => handleFileChange(item.id, 'audio', e.target.files[0])}
-                                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
-                                    />
+                                </div>
+
+                                {/* Right Column: Journal Entry */}
+                                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <div style={{ marginBottom: '24px' }}>
+                                        <label style={{
+                                            display: 'block', color: 'rgba(255,255,255,0.5)',
+                                            fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '4px'
+                                        }}>
+                                            Date & Location
+                                        </label>
+                                        <div style={{ fontFamily: 'Georgia, serif', color: 'rgba(255,255,255,0.7)', fontSize: '1.1rem' }}>
+                                            {new Date().toLocaleDateString()} • Singapore
+                                        </div>
+                                    </div>
+
+                                    {/* Title Input */}
+                                    <div style={{ marginBottom: '24px' }}>
+                                        <input
+                                            type="text"
+                                            value={item.title}
+                                            onChange={(e) => handleInputChange(item.id, 'title', e.target.value)}
+                                            placeholder="Memory Title..."
+                                            style={{
+                                                width: '100%', padding: '10px 0',
+                                                background: 'transparent',
+                                                border: 'none',
+                                                borderBottom: '2px dashed rgba(255,255,255,0.2)',
+                                                color: 'white',
+                                                fontSize: '2rem',
+                                                fontFamily: 'Georgia, serif',
+                                                outline: 'none'
+                                            }}
+                                        />
+                                    </div>
+
+                                    {/* Description Input */}
+                                    <div style={{ marginBottom: '24px', flex: 1 }}>
+                                        <textarea
+                                            value={item.description}
+                                            onChange={(e) => handleInputChange(item.id, 'description', e.target.value)}
+                                            placeholder="Write your story here..."
+                                            rows={6}
+                                            style={{
+                                                width: '100%', padding: '15px',
+                                                background: 'rgba(255,255,255,0.03)',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                color: 'rgba(255,255,255,0.9)',
+                                                fontSize: '1.1rem',
+                                                fontFamily: 'Georgia, serif',
+                                                lineHeight: '1.6',
+                                                resize: 'vertical',
+                                                outline: 'none'
+                                            }}
+                                        />
+                                    </div>
+
+                                    {/* Audio Upload */}
+                                    <div>
+                                        <label style={{
+                                            display: 'flex', alignItems: 'center', gap: '8px',
+                                            cursor: 'pointer', width: 'fit-content',
+                                            padding: '8px 16px', borderRadius: '50px',
+                                            background: item.audio ? 'rgba(76, 201, 240, 0.2)' : 'rgba(255,255,255,0.05)',
+                                            border: `1px solid ${item.audio ? '#4cc9f0' : 'rgba(255,255,255,0.1)'}`,
+                                            transition: 'all 0.2s'
+                                        }}>
+                                            {item.audio ? <Volume2 size={18} color="#4cc9f0" /> : <Mic size={18} color="rgba(255,255,255,0.7)" />}
+                                            <span style={{ fontSize: '0.9rem', color: item.audio ? '#4cc9f0' : 'rgba(255,255,255,0.7)' }}>
+                                                {item.audio ? item.audio.name : "Add Voice Note"}
+                                            </span>
+                                            <input
+                                                type="file"
+                                                accept="audio/*"
+                                                onChange={(e) => handleFileChange(item.id, 'audio', e.target.files[0])}
+                                                style={{ display: 'none' }}
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-
-                    </div>
-                ))}
+                    );
+                })}
 
                 {/* Add Item Button */}
-                <button
-                    onClick={addItem}
-                    className="glass-panel"
-                    style={{
-                        width: '100%', padding: '16px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                        color: 'white', cursor: 'pointer', marginBottom: '24px'
-                    }}
-                >
-                    <Plus size={20} />
-                    <span>Add Another Memory</span>
-                </button>
+                <div style={{ textAlign: 'center', marginBottom: '60px' }}>
+                    <button
+                        onClick={addItem}
+                        style={{
+                            background: 'transparent',
+                            border: '2px dashed rgba(255,255,255,0.2)',
+                            borderRadius: '16px',
+                            padding: '16px 32px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            fontFamily: 'var(--font-display)',
+                            fontSize: '1.1rem',
+                            transition: 'all 0.2s'
+                        }}
+                        className="hover-glow"
+                    >
+                        <Plus size={24} />
+                        <span>New Page</span>
+                    </button>
+                </div>
 
-                {/* Confirm Button */}
-                <button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    style={{
-                        width: '100%', padding: '16px',
-                        background: '#fff', border: 'none', borderRadius: '50px',
-                        fontSize: '1.1rem', fontWeight: 600,
-                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                        opacity: isSubmitting ? 0.7 : 1,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px'
-                    }}
-                >
-                    {isSubmitting ? <Loader2 className="spinner" /> : <Save size={20} />}
-                    <span>{isSubmitting ? 'Creating Journey...' : 'Save & Create Journey'}</span>
-                </button>
+                {/* Floating Action Buffer (FAB) for Save */}
+                <div style={{
+                    position: 'fixed', bottom: '40px', right: '40px', zIndex: 100
+                }}>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        style={{
+                            padding: '16px 32px',
+                            background: 'var(--text-main)',
+                            color: 'var(--bg-dark)',
+                            border: 'none',
+                            borderRadius: '50px',
+                            fontSize: '1.1rem', fontWeight: 600,
+                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                            opacity: isSubmitting ? 0.7 : 1,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                            transform: isSubmitting ? 'scale(0.95)' : 'scale(1)',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        {isSubmitting ? <Loader2 className="spinner" /> : <Save size={20} />}
+                        <span>{isSubmitting ? 'Binding Journal...' : 'Finish Journal'}</span>
+                    </button>
+                </div>
 
-                {/* Error Message */}
+                {/* Error Message Toast */}
                 {error && (
                     <div style={{
-                        marginTop: '20px',
-                        background: 'rgba(255,100,100,0.2)',
-                        color: '#ff6b6b',
-                        padding: '12px',
-                        borderRadius: '8px',
-                        textAlign: 'center'
+                        position: 'fixed', bottom: '110px', right: '40px', zIndex: 100,
+                        background: '#ff6b6b',
+                        color: 'white',
+                        padding: '12px 24px',
+                        borderRadius: '12px',
+                        fontWeight: 500,
+                        boxShadow: '0 5px 20px rgba(0,0,0,0.3)',
+                        animation: 'fadeIn 0.3s ease-out'
                     }}>
                         {error}
                     </div>
@@ -284,3 +378,6 @@ export default function CreateJourney() {
         </div>
     );
 }
+
+// Add simple hover effect in style block within component or rely on CSS
+// I will rely on the inline styles mostly but the .hover-glow class helps.

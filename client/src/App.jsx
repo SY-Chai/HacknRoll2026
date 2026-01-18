@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
 import Journey from './pages/Journey';
-import Memories from './pages/Memories';
+import CreateJourney from './pages/CreateJourney';
 import SplatPage from './pages/SplatPage';
 
 import SavedJournals from './pages/SavedJournals';
@@ -13,7 +13,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/journey/:id" element={<Journey />} />
-        <Route path="/memories" element={<Memories />} />
+        <Route path="/memories" element={<CreateJourney />} />
         <Route path="/saved" element={<SavedJournals />} />
         <Route path="/splat" element={<SplatPage />} />
       </Routes>

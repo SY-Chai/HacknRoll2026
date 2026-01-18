@@ -451,6 +451,7 @@ export default function Journey() {
             style={{
               fontSize: "1.25rem",
               fontWeight: 700,
+              fontFamily: "Georgia, serif",
               margin: 0,
               textShadow: "0 2px 4px rgba(0,0,0,0.5)",
               whiteSpace: "nowrap",
@@ -622,7 +623,7 @@ export default function Journey() {
               {currentChapter.img_url ? (
                 <>
                   {currentChapter.isColorMode &&
-                  currentChapter.colorized_url ? (
+                    currentChapter.colorized_url ? (
                     <ReactCompareSlider
                       itemOne={
                         <ReactCompareSliderImage
@@ -781,7 +782,8 @@ export default function Journey() {
             width: "90vw",
             margin: "0 auto",
             padding: "16px 24px",
-            fontSize: "1rem",
+            fontSize: "1.1rem",
+            fontFamily: "Georgia, serif",
             color: "#ddd",
             lineHeight: 1.6,
             overflowY: "auto",
