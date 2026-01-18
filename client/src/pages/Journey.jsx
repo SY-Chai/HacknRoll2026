@@ -295,8 +295,8 @@ export default function Journey() {
         <Loader2 size={48} className="spinner" />
         <p style={{ marginTop: "16px" }}>
           {chapters.length === 0
-            ? "Searching Archives & Restoring Memories..."
-            : "Loading Journey..."}
+            ? "Searching archives & restoring memories..."
+            : "Loading journey..."}
         </p>
         {chapters.length === 0 && (
           <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "8px" }}>
