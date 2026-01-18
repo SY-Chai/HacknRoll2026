@@ -11,6 +11,10 @@
         {
             "source": "/color/(.*)",
             "destination": "https://hacknroll2026-bs5g.onrender.com/color/$1"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/"
         }
     ]
 }
