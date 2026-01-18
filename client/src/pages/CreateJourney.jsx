@@ -128,7 +128,7 @@ export default function CreateJourney() {
                 {/* Intro Text */}
                 <div style={{ textAlign: 'center', marginBottom: '40px', color: 'rgba(255,255,255,0.8)' }}>
                     <p style={{ fontFamily: 'Georgia, serif', fontSize: '1.8rem', fontStyle: 'italic', transform: 'rotate(-1deg)' }}>
-                        "Collecting moments, carefully curating memories..."
+                        "Collecting moments, curating memories..."
                     </p>
                 </div>
 
