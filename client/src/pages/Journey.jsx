@@ -104,21 +104,31 @@ export default function Journey() {
   // Check if saved on load
   useEffect(() => {
     if (!id) return;
-    const savedIds = JSON.parse(
-      localStorage.getItem("savedJournalIds") || "[]",
-    );
-    setIsSaved(savedIds.includes(id));
+    let savedIds = [];
+    try {
+      savedIds = JSON.parse(localStorage.getItem("savedJournalIds") || "[]");
+    } catch (e) {
+      console.error("Failed to parse saved journals:", e);
+      localStorage.setItem("savedJournalIds", "[]");
+    }
+    // Ensure string comparison
+    setIsSaved(savedIds.map(String).includes(String(id)));
   }, [id]);
 
   const handleSave = () => {
-    const savedIds = JSON.parse(
-      localStorage.getItem("savedJournalIds") || "[]",
-    );
+    let savedIds = [];
+    try {
+      savedIds = JSON.parse(localStorage.getItem("savedJournalIds") || "[]");
+    } catch (e) {
+      console.error("Failed to parse saved journals:", e);
+      localStorage.setItem("savedJournalIds", "[]");
+    }
     let newIds;
+    // Ensure string comparison
     if (isSaved) {
-      newIds = savedIds.filter((sid) => sid !== id);
+      newIds = savedIds.filter((sid) => String(sid) !== String(id));
     } else {
-      newIds = [...savedIds, id];
+      newIds = [...savedIds, id]; // Save as is (likely string from URL)
     }
     localStorage.setItem("savedJournalIds", JSON.stringify(newIds));
     setIsSaved(!isSaved);
@@ -451,6 +461,7 @@ export default function Journey() {
             style={{
               fontSize: "1.25rem",
               fontWeight: 700,
+              fontFamily: "Georgia, serif",
               margin: 0,
               textShadow: "0 2px 4px rgba(0,0,0,0.5)",
               whiteSpace: "nowrap",
@@ -622,7 +633,7 @@ export default function Journey() {
               {currentChapter.img_url ? (
                 <>
                   {currentChapter.isColorMode &&
-                  currentChapter.colorized_url ? (
+                    currentChapter.colorized_url ? (
                     <ReactCompareSlider
                       itemOne={
                         <ReactCompareSliderImage
@@ -781,7 +792,8 @@ export default function Journey() {
             width: "90vw",
             margin: "0 auto",
             padding: "16px 24px",
-            fontSize: "1rem",
+            fontSize: "1.1rem",
+            fontFamily: "Georgia, serif",
             color: "#ddd",
             lineHeight: 1.6,
             overflowY: "auto",

@@ -11,12 +11,8 @@ import {
 } from "lucide-react";
 import SceneViewer from "../components/SceneViewer";
 
-import Slider from "rc-slider";
-import "rc-slider/assets/index.css";
-
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [dateRange, setDateRange] = useState([1900, 2026]);
   const [recentSearches, setRecentSearches] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -51,8 +47,6 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query,
-          startYear: dateRange[0].toString(),
-          endYear: dateRange[1].toString(),
         }),
       });
 
@@ -219,7 +213,7 @@ export default function Home() {
 
             <input
               type="text"
-              placeholder="Try searching 'Chinatown'..."
+              placeholder="Try searching '1970s Chinatown'..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -274,47 +268,7 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Year Range Slider */}
-          <div style={{ w: "90%", width: "90%", padding: "0 10px" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                color: "rgba(255,255,255,0.6)",
-                fontSize: "0.85rem",
-                marginBottom: "8px",
-              }}
-            >
-              <span>{dateRange[0]}</span>
-              <span>Year Range</span>
-              <span>{dateRange[1]}</span>
-            </div>
-            <Slider
-              range
-              min={1800}
-              max={2026}
-              defaultValue={[1900, 2026]}
-              value={dateRange}
-              onChange={(val) => setDateRange(val)}
-              trackStyle={[{ backgroundColor: "var(--text-main)", height: 4 }]}
-              handleStyle={[
-                {
-                  borderColor: "var(--text-main)",
-                  backgroundColor: "var(--text-main)",
-                  opacity: 1,
-                },
-                {
-                  borderColor: "var(--text-main)",
-                  backgroundColor: "var(--text-main)",
-                  opacity: 1,
-                },
-              ]}
-              railStyle={{
-                backgroundColor: "rgba(255,255,255,0.2)",
-                height: 4,
-              }}
-            />
-          </div>
+
         </motion.form>
 
         {/* Action Buttons */}

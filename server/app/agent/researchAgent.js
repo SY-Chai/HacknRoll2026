@@ -109,6 +109,43 @@ export async function enhanceDescription(title, date) {
   }
 }
 
+// Parse User Query to extract Year Range
+export async function parseUserQuery(originalQuery) {
+  try {
+    const prompt = `
+      Analyze the following search query: "${originalQuery}"
+
+      Extract:
+      1. The main search keywords (clean text without years/dates).
+      2. The start year (if any).
+      3. The end year (if any).
+
+      Rules:
+      - If a decade is mentioned (e.g., "1990s"), start=1990, end=1999.
+      - If a specific year is mentioned (e.g., "1985"), start=1985, end=1985.
+      - If "pre-war" or similar, infer a reasonable range (e.g., 1900-1941).
+      - If no date is mentioned, set start=1800, end=2026.
+      - Return JSON format strictly: { "query": "...", "startYear": 1234, "endYear": 5678 }
+    `;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    });
+    
+    const response = await result.response;
+    const jsonText = response.text();
+    const parsed = JSON.parse(jsonText);
+    
+    console.log(`[AI Parse] In: "${originalQuery}" -> Out:`, parsed);
+    return parsed;
+  } catch (error) {
+    console.error("Query parsing failed:", error);
+    // Fallback
+    return { query: originalQuery, startYear: 1800, endYear: 2026 };
+  }
+}
+
 // Helper to create WAV header for raw PCM
 function createWavHeader(
   dataLength,

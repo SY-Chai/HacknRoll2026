@@ -10,34 +10,35 @@ This project bridges the generational gap:
 ## What it does
 Rewind is a time-traveling experience that encourages exploration:
 *   **Exploration**: Users stick a landing in a retro-styled 3D world (Chinatown, Old School locations) and navigate to find glowing "memory orbs".
-*   **Discovery**:Interacting with an orb pulls up real archival records from the National Archives of Singapore.
+*   **Discovery**: Interacting with an orb pulls up real archival records from the National Archives of Singapore.
+*   **Time Filtering**: Search isn't just about keywords; users can filter history by specific decades using the year-range slider to find precise moments in time.
 *   **Colorization**: Users can instantly colorize black-and-white archival photos to see how the past might have looked in vibrant color.
 *   **Compare Mode**: A slider allows users to compare the original history with the reimagined present.
 *   **AI Narration**: An intelligent guide narrates the context of the image, making history accessible without reading walls of text.
+*   **Personal Journals**: Users can upload their own family photos and stories to create a digital "Time Capsule", preserving personal history alongside national archives.
 *   **Memory Lane**: Users can save their favorite discoveries to a personal "book", curating their own museum of memories.
 *   **Smart Caching**: The application remembers what you've seen, making subsequent visits instant.
 
 ## How we built it
 We used a modern tech stack to blend performance with visual fidelity:
-*   **Frontend**: Built with **React** and **Vite**. The 3D experience is powered by **React Three Fiber (R3F)** and **Drei**, while **Framer Motion** handles the seamless UI transitions.
-*   **Backend**: A **Node.js/Express** server handles the API logic. We use **Cheerio** to ethically scrape and parse data from the National Archives.
-*   **AI Integration**: We leveraged **Google Gemini Pro** for generating contextual historical insights and **OpenAI/Kokoro** for Text-to-Speech generation.
-*   **Database & Storage**: **Supabase** manages user sessions and the "Memory Lane" database, while **Cloudflare R2** provides low-latency storage for media assets.
-*   **Image Processing**: We integrated an external API for the image colorization and comparison slider.
+*   **Frontend**: Built with **React** and **Vite**. The 3D experience is powered by **React Three Fiber (R3F)** and **Drei**, while **Spark** enables the rendering of high-fidelity 3D Gaussian Splats. **Framer Motion** handles the seamless UI transitions.
+*   **Backend**: A **Node.js/Express** server handles the API logic. We use **Cheerio** to ethically scrape and parse data from the National Archives. We also implemented a **Visual Filter** using **GPT-4o-mini** to intelligently analyze scraped images, filtering out documents and maps to ensure only relevant ground-level photography makes it into the 3D world.
+*   **AI Integration**: We leveraged **Google Gemini 2.5 Flash** for two key tasks: generating rich historical descriptions and intelligently **colorizing/upscaling** old photos. We integrated **Exa.ai** to perform high-precision semantic searches, ensuring our AI-generated narrations are grounded in real historical context. **OpenAI TTS** brings these stories to life with natural-sounding voiceovers.
+*   **Database & Storage**: **Supabase** manages user sessions and the "Memory Lane" database, while **Cloudflare R2** provides low-latency storage for media assets (images & audio).
 
 ## Challenges we ran into
 *   **Rendering Performance**: Balancing a high-fidelity 3D world with HTML overlays was tricky. We faced issues with "black screens" due to React hook ordering violations when mounting/unmounting the heavy 3D canvas, which required careful lifecycle management.
 *   **Data Consistency**: Scraping archival data is unpredictable. We had to write robust parsers to handle missing titles, malformed dates, and varying description formats.
-*   **Latency**: Generating AI audio and colorizing images takes time. We implemented aggressive caching strategies and optimistic UI updates to make the app feel responsive even while waiting for the server.
+*   **Latency**: Generating AI audio and colorizing images takes time. We implemented aggressive strategies: **optimistic UI updates**, **background processing**, and **smart caching** (hashing content to reuse generated assets) to make the app feel responsive.
 
 ## Accomplishments that we're proud of
 *   **Seamless Integration**: The transition from the 3D world to the 2D archival view feels natural and unbroken.
 *   **The "Magic" Slider**: Seeing a black-and-white photo burst into color with the comparison slider is a genuine "wow" moment for everyone who tries it.
-*   **Optimized Caching**: We built a system that caches scraped data and generated assets, significantly reducing load times for popular locations.
+*   **Intelligent History**: By combining **Exa.ai**'s search with **Gemini's** synthesis, we turn static metadata into engaging stories.
 
 ## What we learned
 *   **The Power of Immersion**: Learning history is much more effective when you are "placed" in the scene rather than just reading about it.
-*   **Asset Management**: efficient loading and disposing of 3D assets is crucial for browser performance.
+*   **Asset Management**: Efficient loading and disposing of 3D assets is crucial for browser performance.
 *   **AI as a Companion**: AI works best when it acts as a guide (contextual voiceover) rather than just a content generator.
 
 ## What's next for Rewind
@@ -46,21 +47,36 @@ We used a modern tech stack to blend performance with visual fidelity:
 *   **Community Stories**: Enable users to share their own stories and photos attached to specific locations.
 *   **Mobile App**: Native mobile application for on-the-go historical discovery.
 
+## 🎮 Controls
+
+### 3D Environment
+*   **Look Around**: Click and drag with your mouse.
+*   **Fly**: Use **W, A, S, D** or **Arrow Keys** to move through the Gaussian Splat scenes.
+*   **Elevation**: Use **E** (Up) and **Q** (Down) to change height.
+*   **Interact**: Click on glowing items to trigger events.
+
+### Journal View
+*   **Navigation**: Use the horizontal arrows to flip through chapters.
+*   **Audio**: Click the Play/Pause button to toggle the AI narrator.
+*   **Zoom**: Click on any image to open it in a full-screen lightbox.
+
 ---
 
-## � Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 - Node.js (v18+)
 - Supabase account
 - Cloudflare R2 bucket
 - Google Gemini API Key
+- OpenAI API Key
+- Exa.ai API Key
 
 ### Installation
 
 1.  **Clone the repository**
     ```bash
-    git clone https://github.com/yourusername/HacknRoll2026.git
+    git clone https://github.com/SY-Chai/HacknRoll2026.git
     cd HacknRoll2026
     ```
 

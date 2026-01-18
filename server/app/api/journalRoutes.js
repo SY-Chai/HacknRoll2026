@@ -8,11 +8,13 @@ import { searchPhotographs } from "../scraper/nasScraper.js";
 import {
   enhanceDescription,
   processAndEnhanceImage,
+  parseUserQuery
 } from "../agent/researchAgent.js";
 import { generate3DGaussians } from "../services/sharpService.js";
 import axios from "axios";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -33,42 +35,50 @@ async function uploadToR2(file, bucket) {
 // --- 1. SEARCH -> DB ---
 router.post("/search", async (req, res) => {
   try {
-    const { query, startYear, endYear } = req.body;
-    if (!query) return res.status(400).json({ error: "Missing query" });
+    const { query: rawQuery } = req.body;
+    if (!rawQuery) return res.status(400).json({ error: "Missing query" });
 
-    console.log(
-      `[Journal] Searching for: ${query} (${startYear || "Any"} - ${endYear || "Any"})`,
-    );
+    console.log(`[Journal] Received Raw Search: ${rawQuery}`);
 
-    // 1. Check for existing Journal
-    // NOTE: If we want to cache by query AND date, we'd need to update the schema or query logic.
-    // For now, let's assume specific date searches are unique enough to warrant a new scrape if the exact query+params don't match.
-    // Actually, the simple 'eq("query", query)' might return a journal that was scraped WITHOUT date filters.
-    // To be safe/simple for HacknRoll, we'll SKIP cache if date filters are present, OR just scrape fresh.
-    // Let's scrape fresh if dates are provided to ensure accuracy.
+    // 1. AI Parse
+    const { query, startYear, endYear } = await parseUserQuery(rawQuery);
+    console.log(`[Journal] Parsed: "${query}" (${startYear}-${endYear})`);
 
+    // 2. Generate Hash
+    // Hash = md5(normalized_query + start + end)
+    // Normalize query: lowercase, trim
+    const normalizedQuery = query.toLowerCase().trim();
+    const hashString = `${normalizedQuery}|${startYear}|${endYear}`;
+    const hash = crypto.createHash("md5").update(hashString).digest("hex");
+    
+    console.log(`[Journal] Computed Hash: ${hash}`);
+
+    // 3. Check for existing Journal by Hash
     let existingJournals = [];
-    if (!startYear && !endYear) {
-      const { data, error: findError } = await supabase
-        .from("Journal")
-        .select("id")
-        .eq("query", query)
-        .limit(1);
-      if (!findError) existingJournals = data;
-    }
+    const { data, error: findError } = await supabase
+      .from("Journal")
+      .select("id")
+      .eq("hash", hash)
+      .limit(1);
+    
+    if (!findError) existingJournals = data;
 
     if (existingJournals && existingJournals.length > 0) {
       console.log(
-        `[Journal] Found existing journal: ${existingJournals[0].id}`,
+        `[Journal] Found existing journal via HASH: ${existingJournals[0].id}`,
       );
       return res.json({ success: true, journalId: existingJournals[0].id });
     }
 
-    // 2. No existing journal, Scrape & Create
-    // Create Journal Entry immediately
+    // 4. No existing journal, Scrape & Create using Parsed Data
     const { data: journal, error: journalError } = await supabase
       .from("Journal")
-      .insert({ query: query, user_created: false, created_at: new Date() })
+      .insert({ 
+        query: query, // Store clean query
+        hash: hash,   // Store hash
+        user_created: false, 
+        created_at: new Date() 
+      })
       .select() // Return inserted row
       .single();
 
@@ -249,7 +259,7 @@ router.post("/search", async (req, res) => {
         };
 
         // Trigger Scraper with Streaming Callback
-        await searchPhotographs(query, undefined, undefined, 5, processItem);
+        await searchPhotographs(query, startYear, endYear, 5, processItem);
 
         // Wait for all item processing to complete before triggering batch 3D
         await Promise.all(processingPromises);
@@ -454,10 +464,46 @@ router.post("/create", upload.any(), async (req, res) => {
 
     // Insert Records
     if (records.length > 0) {
-      const { error: recordsError } = await supabase
+      const { data: insertedRecords, error: recordsError } = await supabase
         .from("Record")
-        .insert(records);
+        .insert(records)
+        .select();
+      
       if (recordsError) throw recordsError;
+
+      // --- Trigger Background 3D Generation ---
+      if (insertedRecords && insertedRecords.length > 0) {
+          console.log(`[Create] Triggering 3D generation for ${insertedRecords.length} items...`);
+          (async () => {
+              try {
+                  const itemsFor3D = insertedRecords.filter(r => r.image_url && r.image_url.startsWith('http'));
+                  if (itemsFor3D.length > 0) {
+                      const urls = itemsFor3D.map(r => r.image_url);
+                      const results = await generate3DGaussians(urls);
+
+                      if (results && results.length > 0) {
+                        for (let i = 0; i < results.length; i++) {
+                            const result = results[i];
+                            const record = itemsFor3D[i];
+                            
+                            if (result && result.ply_url) {
+                                const { error: updateError } = await supabase
+                                    .from('Record')
+                                    .update({ splat_url: result.ply_url })
+                                    .eq('id', record.id);
+                                
+                                if (!updateError) {
+                                    console.log(`[Create] Updated record ${record.id} with splat URL: ${result.ply_url}`);
+                                }
+                            }
+                        }
+                      }
+                  }
+              } catch (bgError) {
+                  console.error("[Create] Background 3D generation failed:", bgError);
+              }
+          })();
+      }
     }
 
     res.json({ success: true, journalId: journal.id });
@@ -473,7 +519,10 @@ router.post("/create", upload.any(), async (req, res) => {
 router.post("/batch", async (req, res) => {
   try {
     const { ids } = req.body;
+    console.log(`[Batch Fetch] Request received for IDs:`, ids);
+
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      console.log(`[Batch Fetch] No IDs provided or empty array.`);
       return res.json({ success: true, data: [] });
     }
 
@@ -483,8 +532,12 @@ router.post("/batch", async (req, res) => {
       .in("id", ids)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+        console.error(`[Batch Fetch] Database error:`, error);
+        throw error;
+    }
 
+    console.log(`[Batch Fetch] Found ${journals?.length || 0} journals.`);
     res.json({ success: true, data: journals });
   } catch (error) {
     console.error("Batch fetch failed:", error);
