@@ -104,21 +104,31 @@ export default function Journey() {
   // Check if saved on load
   useEffect(() => {
     if (!id) return;
-    const savedIds = JSON.parse(
-      localStorage.getItem("savedJournalIds") || "[]",
-    );
-    setIsSaved(savedIds.includes(id));
+    let savedIds = [];
+    try {
+      savedIds = JSON.parse(localStorage.getItem("savedJournalIds") || "[]");
+    } catch (e) {
+      console.error("Failed to parse saved journals:", e);
+      localStorage.setItem("savedJournalIds", "[]");
+    }
+    // Ensure string comparison
+    setIsSaved(savedIds.map(String).includes(String(id)));
   }, [id]);
 
   const handleSave = () => {
-    const savedIds = JSON.parse(
-      localStorage.getItem("savedJournalIds") || "[]",
-    );
+    let savedIds = [];
+    try {
+      savedIds = JSON.parse(localStorage.getItem("savedJournalIds") || "[]");
+    } catch (e) {
+      console.error("Failed to parse saved journals:", e);
+      localStorage.setItem("savedJournalIds", "[]");
+    }
     let newIds;
+    // Ensure string comparison
     if (isSaved) {
-      newIds = savedIds.filter((sid) => sid !== id);
+      newIds = savedIds.filter((sid) => String(sid) !== String(id));
     } else {
-      newIds = [...savedIds, id];
+      newIds = [...savedIds, id]; // Save as is (likely string from URL)
     }
     localStorage.setItem("savedJournalIds", JSON.stringify(newIds));
     setIsSaved(!isSaved);

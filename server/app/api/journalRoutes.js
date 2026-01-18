@@ -47,15 +47,17 @@ router.post("/search", async (req, res) => {
     // To be safe/simple for HacknRoll, we'll SKIP cache if date filters are present, OR just scrape fresh.
     // Let's scrape fresh if dates are provided to ensure accuracy.
 
+    // 1. Check for existing Journal
+    // Always check for existing journal by query to prevent duplicates.
+    // We prioritize the query match over date filters to reuse the same "container".
     let existingJournals = [];
-    if (!startYear && !endYear) {
-      const { data, error: findError } = await supabase
-        .from("Journal")
-        .select("id")
-        .eq("query", query)
-        .limit(1);
-      if (!findError) existingJournals = data;
-    }
+    const { data, error: findError } = await supabase
+      .from("Journal")
+      .select("id")
+      .ilike("query", query)
+      .limit(1);
+    
+    if (!findError) existingJournals = data;
 
     if (existingJournals && existingJournals.length > 0) {
       console.log(
@@ -454,10 +456,46 @@ router.post("/create", upload.any(), async (req, res) => {
 
     // Insert Records
     if (records.length > 0) {
-      const { error: recordsError } = await supabase
+      const { data: insertedRecords, error: recordsError } = await supabase
         .from("Record")
-        .insert(records);
+        .insert(records)
+        .select();
+      
       if (recordsError) throw recordsError;
+
+      // --- Trigger Background 3D Generation ---
+      if (insertedRecords && insertedRecords.length > 0) {
+          console.log(`[Create] Triggering 3D generation for ${insertedRecords.length} items...`);
+          (async () => {
+              try {
+                  const itemsFor3D = insertedRecords.filter(r => r.image_url && r.image_url.startsWith('http'));
+                  if (itemsFor3D.length > 0) {
+                      const urls = itemsFor3D.map(r => r.image_url);
+                      const results = await generate3DGaussians(urls);
+
+                      if (results && results.length > 0) {
+                        for (let i = 0; i < results.length; i++) {
+                            const result = results[i];
+                            const record = itemsFor3D[i];
+                            
+                            if (result && result.ply_url) {
+                                const { error: updateError } = await supabase
+                                    .from('Record')
+                                    .update({ splat_url: result.ply_url })
+                                    .eq('id', record.id);
+                                
+                                if (!updateError) {
+                                    console.log(`[Create] Updated record ${record.id} with splat URL: ${result.ply_url}`);
+                                }
+                            }
+                        }
+                      }
+                  }
+              } catch (bgError) {
+                  console.error("[Create] Background 3D generation failed:", bgError);
+              }
+          })();
+      }
     }
 
     res.json({ success: true, journalId: journal.id });
@@ -473,7 +511,10 @@ router.post("/create", upload.any(), async (req, res) => {
 router.post("/batch", async (req, res) => {
   try {
     const { ids } = req.body;
+    console.log(`[Batch Fetch] Request received for IDs:`, ids);
+
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      console.log(`[Batch Fetch] No IDs provided or empty array.`);
       return res.json({ success: true, data: [] });
     }
 
@@ -483,8 +524,12 @@ router.post("/batch", async (req, res) => {
       .in("id", ids)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+        console.error(`[Batch Fetch] Database error:`, error);
+        throw error;
+    }
 
+    console.log(`[Batch Fetch] Found ${journals?.length || 0} journals.`);
     res.json({ success: true, data: journals });
   } catch (error) {
     console.error("Batch fetch failed:", error);

@@ -86,6 +86,13 @@ export default function CreateJourney() {
             const data = await response.json();
 
             if (data.success && data.journalId) {
+                // Save to 'My Journals' locally for privacy
+                const myIds = JSON.parse(localStorage.getItem('myJournalIds') || '[]');
+                if (!myIds.includes(data.journalId)) {
+                    myIds.push(data.journalId);
+                    localStorage.setItem('myJournalIds', JSON.stringify(myIds));
+                }
+
                 navigate(`/journey/${data.journalId}`);
             }
 

@@ -87,6 +87,19 @@ export default function Memories() {
 
             const data = await response.json();
             if (data.success) {
+                // Save to 'My Journals' locally for privacy
+                let myIds = [];
+                try {
+                    myIds = JSON.parse(localStorage.getItem('myJournalIds') || '[]');
+                } catch (e) {
+                    console.error("Failed to parse my journals:", e);
+                }
+
+                if (!myIds.includes(data.journalId)) {
+                    myIds.push(data.journalId);
+                    localStorage.setItem('myJournalIds', JSON.stringify(myIds));
+                }
+
                 // Redirect to the new Journey
                 navigate(`/journey/${data.journalId}`);
             } else {

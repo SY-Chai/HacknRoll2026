@@ -13,15 +13,42 @@ export default function SavedJournals() {
     useEffect(() => {
         const loadAll = async () => {
             try {
-                // 1. Fetch User Created Journals
-                const mineRes = await fetch('/api/journal/mine');
-                const mineData = await mineRes.json();
-                if (mineData.success) {
-                    setUserJournals(mineData.data);
+                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+                // 1. Fetch User Created Journals (Locally tracked for privacy)
+                let myIds = [];
+                try {
+                    const rawMyIds = JSON.parse(localStorage.getItem('myJournalIds') || '[]');
+                    myIds = rawMyIds.filter(id => uuidRegex.test(id));
+                } catch (e) {
+                    console.error("Failed to parse my journals:", e);
                 }
 
-                // 2. Fetch Helper for Saved IDs
-                const savedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+                if (myIds.length > 0) {
+                    const mineRes = await fetch('/api/journal/batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: myIds })
+                    });
+                    const mineData = await mineRes.json();
+                    if (mineData.success) {
+                        setUserJournals(mineData.data);
+                    }
+                } else {
+                    setUserJournals([]);
+                }
+
+                // 2. Fetch Saved Discoveries (Bookmarks)
+                let savedIds = [];
+                try {
+                    const rawSavedIds = JSON.parse(localStorage.getItem('savedJournalIds') || '[]');
+                    console.log("[SavedJournals] Raw saved IDs:", rawSavedIds);
+                    savedIds = rawSavedIds.filter(id => uuidRegex.test(id));
+                    console.log("[SavedJournals] Filtered valid UUIDs:", savedIds);
+                } catch (e) {
+                    console.error("Failed to parse saved journals:", e);
+                }
+
                 if (savedIds.length > 0) {
                     const batchRes = await fetch('/api/journal/batch', {
                         method: 'POST',
@@ -32,6 +59,8 @@ export default function SavedJournals() {
                     if (batchData.success) {
                         setSavedJournals(batchData.data);
                     }
+                } else {
+                    setSavedJournals([]);
                 }
             } catch (error) {
                 console.error("Failed to load journals:", error);
