@@ -85,6 +85,8 @@ router.post("/search", async (req, res) => {
         // Track processed records for 3D generation
         let processedRecords = [];
         let firstImageSentFor3D = false;
+        // Track all processing promises to ensure they complete before batch 3D
+        let processingPromises = [];
 
         // Helper to update record with splat URL
         const updateRecordWithSplat = async (recordId, plyUrl) => {
@@ -105,143 +107,152 @@ router.post("/search", async (req, res) => {
           }
         };
 
-        // Define Streaming Callback
+        // Define Streaming Callback - wraps actual work in a tracked promise
         const processItem = async (item) => {
-          console.log(`[Journal ${journal.id}] Processing item: ${item.title}`);
-
-          // 1. Enhance Description
-          let description = item.tempTitle;
-          try {
-            description = await enhanceDescription(
-              item.title || item.tempTitle,
-              item.date || "Unknown Date",
+          const processingPromise = (async () => {
+            console.log(
+              `[Journal ${journal.id}] Processing item: ${item.title}`,
             );
-          } catch (descErr) {
-            console.warn(`Description enhancement failed for ${item.url}`);
-          }
 
-          // 2. Upload Image to R2 (Upscaled + Colorized)
-          let imageUrl = item.imageUrl;
-          try {
-            const imgRes = await axios.get(item.imageUrl, {
-              responseType: "arraybuffer",
-            });
-            const originalBuffer = Buffer.from(imgRes.data);
-
-            // Process Image (Upscale + Colorize)
-            let finalBuffer = originalBuffer;
-            let mimeType = imgRes.headers["content-type"] || "image/jpeg";
-
+            // 1. Enhance Description
+            let description = item.tempTitle;
             try {
-              const enhancedFilename =
-                await processAndEnhanceImage(originalBuffer);
-              if (enhancedFilename) {
-                const enhancedPath = path.join(
-                  process.cwd(),
-                  "tmp",
-                  "enhanced_cache",
-                  enhancedFilename,
-                );
-                if (fs.existsSync(enhancedPath)) {
-                  finalBuffer = fs.readFileSync(enhancedPath);
-                  mimeType = "image/png"; // Enhanced output is PNG
+              description = await enhanceDescription(
+                item.title || item.tempTitle,
+                item.date || "Unknown Date",
+              );
+            } catch (descErr) {
+              console.warn(`Description enhancement failed for ${item.url}`);
+            }
+
+            // 2. Upload Image to R2 (Upscaled + Colorized)
+            let imageUrl = item.imageUrl;
+            try {
+              const imgRes = await axios.get(item.imageUrl, {
+                responseType: "arraybuffer",
+              });
+              const originalBuffer = Buffer.from(imgRes.data);
+
+              // Process Image (Upscale + Colorize)
+              let finalBuffer = originalBuffer;
+              let mimeType = imgRes.headers["content-type"] || "image/jpeg";
+
+              try {
+                const enhancedFilename =
+                  await processAndEnhanceImage(originalBuffer);
+                if (enhancedFilename) {
+                  const enhancedPath = path.join(
+                    process.cwd(),
+                    "tmp",
+                    "enhanced_cache",
+                    enhancedFilename,
+                  );
+                  if (fs.existsSync(enhancedPath)) {
+                    finalBuffer = fs.readFileSync(enhancedPath);
+                    mimeType = "image/png"; // Enhanced output is PNG
+                  }
                 }
+              } catch (processingErr) {
+                console.warn(
+                  `Processing failed for ${item.imageUrl}, falling back to original.`,
+                  processingErr.message,
+                );
               }
-            } catch (processingErr) {
+
+              const file = {
+                buffer: finalBuffer,
+                originalname: `record_${Date.now()}.${mimeType.split("/")[1] || "jpg"}`,
+                mimetype: mimeType,
+              };
+
+              const key = await uploadToR2(file, R2_BUCKETS.IMAGE);
+              imageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
+            } catch (imgErr) {
               console.warn(
-                `Processing failed for ${item.imageUrl}, falling back to original.`,
-                processingErr.message,
+                `Image upload to R2 failed for ${item.imageUrl}:`,
+                imgErr.message,
               );
             }
 
-            const file = {
-              buffer: finalBuffer,
-              originalname: `record_${Date.now()}.${mimeType.split("/")[1] || "jpg"}`,
-              mimetype: mimeType,
+            // Insert Record Incremental
+            const record = {
+              journal_id: journal.id,
+              title: item.title || item.tempTitle,
+              description: description,
+              image_url: imageUrl,
+              audio_url: null,
+              splat_url: null,
             };
 
-            const key = await uploadToR2(file, R2_BUCKETS.IMAGE);
-            imageUrl = `${R2_DOMAINS.IMAGE}/${key}`;
-          } catch (imgErr) {
-            console.warn(
-              `Image upload to R2 failed for ${item.imageUrl}:`,
-              imgErr.message,
-            );
-          }
+            const { data: insertedRecord, error: insertError } = await supabase
+              .from("Record")
+              .insert(record)
+              .select()
+              .single();
 
-          // Insert Record Incremental
-          const record = {
-            journal_id: journal.id,
-            title: item.title || item.tempTitle,
-            description: description,
-            image_url: imageUrl,
-            audio_url: null,
-            splat_url: null,
-          };
-
-          const { data: insertedRecord, error: insertError } = await supabase
-            .from("Record")
-            .insert(record)
-            .select()
-            .single();
-
-          if (insertError) {
-            console.error(
-              `Failed to insert record for ${item.title}:`,
-              insertError.message,
-            );
-          } else {
-            console.log(
-              `[Journal ${journal.id}] Record inserted: ${item.title} (ID: ${insertedRecord.id})`,
-            );
-
-            // Track this record
-            processedRecords.push({
-              id: insertedRecord.id,
-              image_url: imageUrl,
-            });
-
-            // Trigger 3D generation for first image immediately (fire-and-forget)
-            if (
-              !firstImageSentFor3D &&
-              imageUrl &&
-              imageUrl.startsWith("http")
-            ) {
-              firstImageSentFor3D = true;
+            if (insertError) {
+              console.error(
+                `Failed to insert record for ${item.title}:`,
+                insertError.message,
+              );
+            } else {
               console.log(
-                `[Journal ${journal.id}] [Request 1] Triggering 3D for first image...`,
+                `[Journal ${journal.id}] Record inserted: ${item.title} (ID: ${insertedRecord.id})`,
               );
 
-              // Fire-and-forget for first image
-              (async () => {
-                try {
-                  const result = await generate3DGaussians([imageUrl]);
-                  if (result && result[0] && result[0].ply_url) {
-                    await updateRecordWithSplat(
-                      insertedRecord.id,
-                      result[0].ply_url,
-                    );
-                    console.log(
-                      `[Journal ${journal.id}] [Request 1] First image 3D complete!`,
-                    );
-                  } else {
-                    console.warn(
-                      `[Journal ${journal.id}] [Request 1] First image 3D failed or no result`,
+              // Track this record
+              processedRecords.push({
+                id: insertedRecord.id,
+                image_url: imageUrl,
+              });
+
+              // Trigger 3D generation for first image immediately (fire-and-forget)
+              if (
+                !firstImageSentFor3D &&
+                imageUrl &&
+                imageUrl.startsWith("http")
+              ) {
+                firstImageSentFor3D = true;
+                console.log(
+                  `[Journal ${journal.id}] [Request 1] Triggering 3D for first image...`,
+                );
+
+                // Fire-and-forget for first image
+                (async () => {
+                  try {
+                    const result = await generate3DGaussians([imageUrl]);
+                    if (result && result[0] && result[0].ply_url) {
+                      await updateRecordWithSplat(
+                        insertedRecord.id,
+                        result[0].ply_url,
+                      );
+                      console.log(
+                        `[Journal ${journal.id}] [Request 1] First image 3D complete!`,
+                      );
+                    } else {
+                      console.warn(
+                        `[Journal ${journal.id}] [Request 1] First image 3D failed or no result`,
+                      );
+                    }
+                  } catch (err) {
+                    console.error(
+                      `[Journal ${journal.id}] [Request 1] First image 3D error:`,
+                      err.message,
                     );
                   }
-                } catch (err) {
-                  console.error(
-                    `[Journal ${journal.id}] [Request 1] First image 3D error:`,
-                    err.message,
-                  );
-                }
-              })();
+                })();
+              }
             }
-          }
+          })();
+          // Track the processing promise so we can wait for all items to be processed
+          processingPromises.push(processingPromise);
         };
 
         // Trigger Scraper with Streaming Callback
         await searchPhotographs(query, undefined, undefined, 5, processItem);
+
+        // Wait for all item processing to complete before triggering batch 3D
+        await Promise.all(processingPromises);
 
         console.log(
           `[Journal ${journal.id}] Scraper finished. ${processedRecords.length} records created.`,
