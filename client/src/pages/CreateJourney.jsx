@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, X, Upload, Save, Loader2, Volume2, Image as ImageIcon, Mic } from 'lucide-react';
+import { ChevronLeft, Plus, X, Upload, Save, Loader2, Image as ImageIcon } from 'lucide-react';
 import SceneViewer from '../components/SceneViewer';
 
 export default function CreateJourney() {
@@ -9,7 +9,7 @@ export default function CreateJourney() {
 
     // Form State
     const [items, setItems] = useState([
-        { id: 1, title: '', description: '', image: null, audio: null, imagePreview: null }
+        { id: 1, title: '', description: '', image: null, imagePreview: null }
     ]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState(null);
@@ -17,7 +17,7 @@ export default function CreateJourney() {
     const addItem = () => {
         setItems([
             ...items,
-            { id: Date.now(), title: '', description: '', image: null, audio: null, imagePreview: null }
+            { id: Date.now(), title: '', description: '', image: null, imagePreview: null }
         ]);
     };
 
@@ -73,7 +73,6 @@ export default function CreateJourney() {
             // image_0, audio_0, image_1, audio_1 ...
             items.forEach((item, index) => {
                 if (item.image) formData.append(`image_${index}`, item.image);
-                if (item.audio) formData.append(`audio_${index}`, item.audio);
             });
 
             const response = await fetch('/api/journal/create', {
@@ -286,28 +285,7 @@ export default function CreateJourney() {
                                         />
                                     </div>
 
-                                    {/* Audio Upload */}
-                                    <div>
-                                        <label style={{
-                                            display: 'flex', alignItems: 'center', gap: '8px',
-                                            cursor: 'pointer', width: 'fit-content',
-                                            padding: '8px 16px', borderRadius: '50px',
-                                            background: item.audio ? 'rgba(76, 201, 240, 0.2)' : 'rgba(255,255,255,0.05)',
-                                            border: `1px solid ${item.audio ? '#4cc9f0' : 'rgba(255,255,255,0.1)'}`,
-                                            transition: 'all 0.2s'
-                                        }}>
-                                            {item.audio ? <Volume2 size={18} color="#4cc9f0" /> : <Mic size={18} color="rgba(255,255,255,0.7)" />}
-                                            <span style={{ fontSize: '0.9rem', color: item.audio ? '#4cc9f0' : 'rgba(255,255,255,0.7)' }}>
-                                                {item.audio ? item.audio.name : "Add Voice Note"}
-                                            </span>
-                                            <input
-                                                type="file"
-                                                accept="audio/*"
-                                                onChange={(e) => handleFileChange(item.id, 'audio', e.target.files[0])}
-                                                style={{ display: 'none' }}
-                                            />
-                                        </label>
-                                    </div>
+                                    {/* Audio Upload Removed - Auto Generated from Description */}
                                 </div>
                             </div>
                         </div>

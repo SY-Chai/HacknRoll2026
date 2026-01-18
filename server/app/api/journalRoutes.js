@@ -8,11 +8,13 @@ import { searchPhotographs } from "../scraper/nasScraper.js";
 import {
   enhanceDescription,
   processAndEnhanceImage,
+  parseUserQuery
 } from "../agent/researchAgent.js";
 import { generate3DGaussians } from "../services/sharpService.js";
 import axios from "axios";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -33,44 +35,50 @@ async function uploadToR2(file, bucket) {
 // --- 1. SEARCH -> DB ---
 router.post("/search", async (req, res) => {
   try {
-    const { query, startYear, endYear } = req.body;
-    if (!query) return res.status(400).json({ error: "Missing query" });
+    const { query: rawQuery } = req.body;
+    if (!rawQuery) return res.status(400).json({ error: "Missing query" });
 
-    console.log(
-      `[Journal] Searching for: ${query} (${startYear || "Any"} - ${endYear || "Any"})`,
-    );
+    console.log(`[Journal] Received Raw Search: ${rawQuery}`);
 
-    // 1. Check for existing Journal
-    // NOTE: If we want to cache by query AND date, we'd need to update the schema or query logic.
-    // For now, let's assume specific date searches are unique enough to warrant a new scrape if the exact query+params don't match.
-    // Actually, the simple 'eq("query", query)' might return a journal that was scraped WITHOUT date filters.
-    // To be safe/simple for HacknRoll, we'll SKIP cache if date filters are present, OR just scrape fresh.
-    // Let's scrape fresh if dates are provided to ensure accuracy.
+    // 1. AI Parse
+    const { query, startYear, endYear } = await parseUserQuery(rawQuery);
+    console.log(`[Journal] Parsed: "${query}" (${startYear}-${endYear})`);
 
-    // 1. Check for existing Journal
-    // Always check for existing journal by query to prevent duplicates.
-    // We prioritize the query match over date filters to reuse the same "container".
+    // 2. Generate Hash
+    // Hash = md5(normalized_query + start + end)
+    // Normalize query: lowercase, trim
+    const normalizedQuery = query.toLowerCase().trim();
+    const hashString = `${normalizedQuery}|${startYear}|${endYear}`;
+    const hash = crypto.createHash("md5").update(hashString).digest("hex");
+    
+    console.log(`[Journal] Computed Hash: ${hash}`);
+
+    // 3. Check for existing Journal by Hash
     let existingJournals = [];
     const { data, error: findError } = await supabase
       .from("Journal")
       .select("id")
-      .ilike("query", query)
+      .eq("hash", hash)
       .limit(1);
     
     if (!findError) existingJournals = data;
 
     if (existingJournals && existingJournals.length > 0) {
       console.log(
-        `[Journal] Found existing journal: ${existingJournals[0].id}`,
+        `[Journal] Found existing journal via HASH: ${existingJournals[0].id}`,
       );
       return res.json({ success: true, journalId: existingJournals[0].id });
     }
 
-    // 2. No existing journal, Scrape & Create
-    // Create Journal Entry immediately
+    // 4. No existing journal, Scrape & Create using Parsed Data
     const { data: journal, error: journalError } = await supabase
       .from("Journal")
-      .insert({ query: query, user_created: false, created_at: new Date() })
+      .insert({ 
+        query: query, // Store clean query
+        hash: hash,   // Store hash
+        user_created: false, 
+        created_at: new Date() 
+      })
       .select() // Return inserted row
       .single();
 
@@ -251,7 +259,7 @@ router.post("/search", async (req, res) => {
         };
 
         // Trigger Scraper with Streaming Callback
-        await searchPhotographs(query, undefined, undefined, 5, processItem);
+        await searchPhotographs(query, startYear, endYear, 5, processItem);
 
         // Wait for all item processing to complete before triggering batch 3D
         await Promise.all(processingPromises);
