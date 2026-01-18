@@ -112,7 +112,8 @@ export default function Home() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          paddingBottom: "100px", // Visual balance
+          padding: "0 20px",
+          margin: "0 auto",
         }}
       >
         {/* Hero Text */}
@@ -207,6 +208,7 @@ export default function Home() {
             <div
               style={{
                 padding: "12px 16px",
+                height: "44px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -244,6 +246,7 @@ export default function Home() {
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
+                margin: "0px",
               }}
               onMouseEnter={(e) =>
                 (e.currentTarget.style.transform = "scale(1.05)")
