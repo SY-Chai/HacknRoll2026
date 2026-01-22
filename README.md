@@ -1,76 +1,61 @@
-# Rewind: Interactive 3D Heritage Journey
+# Rewind: Interactive 3D Journey
 
-An immersive 3D web application allowing users to explore historical archival records of Singapore through an interactive virtual environment. This project combines modern web technologies with AI and archival data to bring history to life.
+**Rewind** is an immersive 3D web application that allows users to explore the rich history of Singapore through an interactive virtual environment. By combining modern web technologies, AI-powered storytelling, and archival data, we bring the past to life.
 
 ## Inspiration
 This project bridges the generational gap:
-*   **For the Elderly**: A nostalgic platform to relive memories by uploading personal old photos and seeing them placed in a historical context. We wanted to give them a way to see their black-and-white memories in color again.
-*   **For the Youth**: An engaging, gamified way to learn about history, moving away from textbooks to an interactive 3D world where curiosity is rewarded.
+*   **For the Elderly**: A nostalgic platform to relive memories. Users can upload old black-and-white photos, which are automatically colorized and narrated, helping them see their past in a new light.
+*   **For the Youth**: An engaging, gamified way to learn history, moving away from static textbooks to an interactive 3D world where curiosity is visually rewarded.
 
-## What it does
-Rewind is a time-traveling experience that encourages exploration:
-*   **Exploration**: Users stick a landing in a retro-styled 3D world (Chinatown, Old School locations) and navigate to find glowing "memory orbs".
-*   **Discovery**: Interacting with an orb pulls up real archival records from the National Archives of Singapore.
-*   **Time Filtering**: Search isn't just about keywords; users can filter history by specific decades using the year-range slider to find precise moments in time.
-*   **Colorization**: Users can instantly colorize black-and-white archival photos to see how the past might have looked in vibrant color.
-*   **Compare Mode**: A slider allows users to compare the original history with the reimagined present.
-*   **AI Narration**: An intelligent guide narrates the context of the image, making history accessible without reading walls of text.
-*   **Personal Journals**: Users can upload their own family photos and stories to create a digital "Time Capsule", preserving personal history alongside national archives.
-*   **Memory Lane**: Users can save their favorite discoveries to a personal "book", curating their own museum of memories.
-*   **Smart Caching**: The application remembers what you've seen, making subsequent visits instant.
+## Features
 
-## How we built it
-We used a modern tech stack to blend performance with visual fidelity:
-*   **Frontend**: Built with **React** and **Vite**. The 3D experience is powered by **React Three Fiber (R3F)** and **Drei**, while **Spark** enables the rendering of high-fidelity 3D Gaussian Splats. **Framer Motion** handles the seamless UI transitions.
-*   **Backend**: A **Node.js/Express** server handles the API logic. We use **Cheerio** to ethically scrape and parse data from the National Archives. We also implemented a **Visual Filter** using **GPT-4o-mini** to intelligently analyze scraped images, filtering out documents and maps to ensure only relevant ground-level photography makes it into the 3D world.
-*   **AI Integration**: We leveraged **Google Gemini 2.5 Flash** for two key tasks: generating rich historical descriptions and intelligently **colorizing/upscaling** old photos. We integrated **Exa.ai** to perform high-precision semantic searches, ensuring our AI-generated narrations are grounded in real historical context. **OpenAI TTS** brings these stories to life with natural-sounding voiceovers.
-*   **Database & Storage**: **Supabase** manages user sessions and the "Memory Lane" database, while **Cloudflare R2** provides low-latency storage for media assets (images & audio).
+### 🌍 Immersive Exploration
+*   **3D Gaussian Splats**: Navigate through photorealistic 3D recreations of historical scenes using **Spark** and **React Three Fiber**.
+*   **Interactive Discovery**: Experience history in a spatial environment, where every image tells a story.
 
-## Challenges we ran into
-*   **Rendering Performance**: Balancing a high-fidelity 3D world with HTML overlays was tricky. We faced issues with "black screens" due to React hook ordering violations when mounting/unmounting the heavy 3D canvas, which required careful lifecycle management.
-*   **Data Consistency**: Scraping archival data is unpredictable. We had to write robust parsers to handle missing titles, malformed dates, and varying description formats.
-*   **Latency**: Generating AI audio and colorizing images takes time. We implemented aggressive strategies: **optimistic UI updates**, **background processing**, and **smart caching** (hashing content to reuse generated assets) to make the app feel responsive.
+### 🕰️ Time Travel Tools
+*   **Smart Search**: Explore history by natural language (e.g., "1970s Chinatown", "Post-war Raffles Hotel"). The timeframe is automatically inferred from your query using **Gemini 2.5 Flash Lite**.
+*   **AI-Powered Narrator**: Every image comes with a story. We use **Exa.ai** to find rich historical context and **Gemini 2.5 Flash Lite** to synthesize it into a compelling narrative.
+*   **Audio Guide**: Listen to the stories with natural-sounding voiceovers generated by **OpenAI TTS**.
 
-## Accomplishments that we're proud of
-*   **Seamless Integration**: The transition from the 3D world to the 2D archival view feels natural and unbroken.
-*   **The "Magic" Slider**: Seeing a black-and-white photo burst into color with the comparison slider is a genuine "wow" moment for everyone who tries it.
-*   **Intelligent History**: By combining **Exa.ai**'s search with **Gemini's** synthesis, we turn static metadata into engaging stories.
+### 🎨 Visual Restoration
+*   **Auto-Colorization & Upscaling**: Instantly restore black-and-white archival photos to vibrant color and high resolution (1080p) using **Gemini 2.5 Flash Image**.
+*   **Compare Mode**: A seamless slider lets you toggle between the original archival image and the AI-restored version.
 
-## What we learned
-*   **The Power of Immersion**: Learning history is much more effective when you are "placed" in the scene rather than just reading about it.
-*   **Asset Management**: Efficient loading and disposing of 3D assets is crucial for browser performance.
-*   **AI as a Companion**: AI works best when it acts as a guide (contextual voiceover) rather than just a content generator.
+### 📖 Personal Scrapbook
+*   **Create Your Journal**: A lovingly designed "scrapbook" interface allows users to upload their own photos to preserve family memories.
+*   **Automatic Enhancement**: Uploaded photos are automatically upscaled and colorized seamlessly.
+*   **Voice Notes**: The AI analyzes your uploaded photos and generates a personalized voiceover description.
 
-## What's next for Rewind
-*   **Multiplayer Exploration**: Allow users to explore the historical world with friends and family in real-time.
-*   **VR Support**: Extend the 3D experience to Virtual Reality headsets for deeper immersion.
-*   **Community Stories**: Enable users to share their own stories and photos attached to specific locations.
-*   **Mobile App**: Native mobile application for on-the-go historical discovery.
+## Tech Stack
 
-## 🎮 Controls
+### Frontend
+*   **Framework**: [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
+*   **3D Rendering**: [Spark](https://spark.js.org/) (Gaussian Splats), [React Three Fiber](https://docs.pmnd.rs/react-three-fiber/), [Drei](https://github.com/pmndrs/drei).
+*   **Styling**: Vanilla CSS with Glassmorphism and Scrapbook aesthetics.
+*   **Animations**: [Framer Motion](https://www.framer.com/motion/) for smooth transitions.
+*   **Icons**: [Lucide React](https://lucide.dev/).
 
-### 3D Environment
-*   **Look Around**: Click and drag with your mouse.
-*   **Fly**: Use **W, A, S, D** or **Arrow Keys** to move through the Gaussian Splat scenes.
-*   **Elevation**: Use **E** (Up) and **Q** (Down) to change height.
-*   **Interact**: Click on glowing items to trigger events.
+### Backend
+*   **Server**: Node.js & Express.
+*   **Scraping**: Custom scraper for the National Archives of Singapore using `axios` & `cheerio`.
+*   **Database**: [Supabase](https://supabase.com/) for persisting journeys and archival records.
+*   **Storage**: [Cloudflare R2](https://www.cloudflare.com/developer-platform/r2/) for robust hosting of processed images and audio.
 
-### Journal View
-*   **Navigation**: Use the horizontal arrows to flip through chapters.
-*   **Audio**: Click the Play/Pause button to toggle the AI narrator.
-*   **Zoom**: Click on any image to open it in a full-screen lightbox.
+### Artificial Intelligence
+*   **Search Intent Parsing**: **Gemini 2.5 Flash Lite** extracts dates and keywords from natural language queries.
+*   **Visual Restoration**: **Gemini 2.5 Flash Image** automagically upscales and colorizes old photos.
+*   **Historical Context**: **Exa.ai** performs semantic search to find deep background information on archival images.
+*   **Storytelling**: **Gemini 2.5 Flash Lite** synthesizes context into a cohesive story.
+*   **Text-to-Speech**: **OpenAI TTS** (model `tts-1`) generates high-quality audio narrations.
 
----
-
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
-- Node.js (v18+)
-- Supabase account
-- Cloudflare R2 bucket
-- Google Gemini API Key
-- OpenAI API Key
-- Exa.ai API Key
+*   Node.js (v18+)
+*   Supabase account & URL/Key
+*   Cloudflare R2 Bucket & Keys
+*   API Keys: Google Gemini, OpenAI, Exa.ai
 
 ### Installation
 
@@ -82,18 +67,66 @@ We used a modern tech stack to blend performance with visual fidelity:
 
 2.  **Install dependencies**
     ```bash
-    cd client && npm install
-    cd ../server && npm install
+    # Install server dependencies
+    cd server
+    npm install
+
+    # Install client dependencies
+    cd ../client
+    npm install
     ```
 
-3.  **Setup Environment Variables**
-    (See `.env.example` in client and server folders)
+3.  **Environment Setup**
+    Create `.env` files in both `client` and `server` directories.
 
-4.  **Run the App**
+    **Server `.env`:**
+    ```env
+    PORT=3000
+    
+    # AI Keys
+    OPENAI_API_KEY=sk-...
+    GEMINI_API_KEY=...
+    EXA_API_KEY=...
+
+    # Database
+    SUPABASE_URL=...
+    SUPABASE_KEY=...
+
+    # Storage (Cloudflare R2)
+    R2_ACCOUNT_ID=...
+    R2_ACCESS_KEY_ID=...
+    R2_SECRET_ACCESS_KEY=...
+    R2_BUCKET_NAME_IMAGES=...
+    R2_BUCKET_NAME_AUDIO=...
+    
+    # R2 Public Domains (for serving content)
+    R2_DOMAIN_IMAGES=...
+    R2_DOMAIN_AUDIO=...
+    ```
+
+4.  **Run the Application**
+    You need to run both the client and server concurrently.
+
     ```bash
-    # Terminal 1 (Server)
-    cd server && npm run dev
+    # Terminal 1: Start Backend
+    cd server
+    npm run dev
 
-    # Terminal 2 (Client)
-    cd client && npm run dev
+    # Terminal 2: Start Frontend
+    cd client
+    npm run dev
     ```
+
+5.  **Open in Browser**
+    Visit `http://localhost:5173` to start your journey.
+
+## Controls
+
+*   **Navigation**: 
+    *   **Search**: Enter a topic (e.g., "1960s Satay Club") to generate a curated journey.
+    *   **Review**: Browse "Saved Journals" to revisit past queries.
+*   **Journey View**:
+    *   **Arrow Keys / Buttons**: Flip through the chronological memories.
+    *   **Click Image**: Enter Lightbox mode. In this mode, use the slider to compare original vs. restored versions.
+    *   **Play Button**: Listen to the AI narration.
+    *   **3D View (If available)**: Some scenes offer a "View in 3D" toggle to explore the space spatially.
